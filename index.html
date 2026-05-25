@@ -76,14 +76,24 @@ const getManagerData = async () => {
 const getStoreManager = async (storeId) => {
   try {
     const { data, error } = await sb.from("managers").select("*").eq("store_id", storeId).single();
-    if (error || !data) return { name:"", email:"", pin:"" };
-    return { name:data.name||"", email:data.email||"", pin:data.pin||"" };
-  } catch(e) { return { name:"", email:"", pin:"" }; }
+    if (error || !data) return { name:"", email:"", pin:"", last_cleaned_at:null };
+    return { name:data.name||"", email:data.email||"", pin:data.pin||"", last_cleaned_at:data.last_cleaned_at||null };
+  } catch(e) { return { name:"", email:"", pin:"", last_cleaned_at:null }; }
 };
 const saveStoreManager = async (storeId, data) => {
   try {
-    await sb.from("managers").upsert({ store_id:storeId, name:data.name||"", email:data.email||"", pin:data.pin||"", updated_at:new Date().toISOString() }, { onConflict:"store_id" });
+    const payload = { store_id:storeId, name:data.name||"", email:data.email||"", pin:data.pin||"", updated_at:new Date().toISOString() };
+    if (data.last_cleaned_at !== undefined) payload.last_cleaned_at = data.last_cleaned_at;
+    await sb.from("managers").upsert(payload, { onConflict:"store_id" });
   } catch(e) { console.error("saveStoreManager error", e); }
+};
+
+const logCleaned = async (storeId) => {
+  try {
+    const now = new Date().toISOString();
+    await sb.from("managers").upsert({ store_id:storeId, last_cleaned_at:now, updated_at:now }, { onConflict:"store_id" });
+    return now;
+  } catch(e) { console.error("logCleaned error", e); return null; }
 };
 
 /* ─── SEND EMAIL ─── */
@@ -333,12 +343,14 @@ function QRCard({ store, size=180, showPrint=true }) {
 ═══════════════════════════════════════════════ */
 function ManagerPortal({ storeId, onLogout }) {
   const store = getStore(storeId);
-  const [reviews, setReviews] = useState([]);
-  const [name,    setName]    = useState("");
-  const [email,   setEmail]   = useState("");
-  const [saved,   setSaved]   = useState(false);
-  const [activeTab, setActiveTab] = useState("overview");
-  const [loading, setLoading] = useState(true);
+  const [reviews,     setReviews]     = useState([]);
+  const [name,        setName]        = useState("");
+  const [email,       setEmail]       = useState("");
+  const [saved,       setSaved]       = useState(false);
+  const [lastCleaned, setLastCleaned] = useState(null);
+  const [logging,     setLogging]     = useState(false);
+  const [activeTab,   setActiveTab]   = useState("overview");
+  const [loading,     setLoading]     = useState(true);
 
   useEffect(()=>{
     const load = async () => {
@@ -347,10 +359,29 @@ function ManagerPortal({ storeId, onLogout }) {
       setReviews(r);
       setName(mgr.name||"");
       setEmail(mgr.email||"");
+      setLastCleaned(mgr.last_cleaned_at||null);
       setLoading(false);
     };
     load();
   },[storeId]);
+
+  const handleLogClean = async () => {
+    setLogging(true);
+    const ts = await logCleaned(storeId);
+    if (ts) setLastCleaned(ts);
+    setLogging(false);
+  };
+
+  const formatCleaned = (ts) => {
+    if (!ts) return null;
+    const d = new Date(ts);
+    const now = new Date();
+    const diffM = Math.floor((now - d) / 60000);
+    if (diffM < 1) return "just now";
+    if (diffM < 60) return diffM + "m ago";
+    if (diffM < 1440) return Math.floor(diffM/60) + "h ago";
+    return d.toLocaleDateString("en-AU", {day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"});
+  };
 
   const handleSave = async () => {
     const mgr = await getStoreManager(storeId);
@@ -516,6 +547,18 @@ function ManagerPortal({ storeId, onLogout }) {
               <div style={{fontFamily:"'Syne',sans-serif",fontSize:"32px",fontWeight:800,color:col,lineHeight:1}}>{val}</div>
             </div>
           ))}
+          <div className="dk-card" style={{padding:"1.25rem",display:"flex",flexDirection:"column",justifyContent:"space-between",gap:"10px"}}>
+            <div>
+              <div style={{fontSize:"11px",color:"rgba(255,255,255,0.3)",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:"6px"}}>Last cleaned</div>
+              <div style={{fontFamily:"'Syne',sans-serif",fontSize:"20px",fontWeight:800,color:lastCleaned?"#27AE60":"#F0B429",lineHeight:1}}>
+                {lastCleaned ? formatCleaned(lastCleaned) : "Not logged"}
+              </div>
+            </div>
+            <button onClick={handleLogClean} disabled={logging}
+              style={{background:"#DA291C",color:"white",border:"none",borderRadius:"7px",padding:"8px 12px",fontSize:"12px",fontWeight:500,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",opacity:logging?0.6:1,width:"100%"}}>
+              {logging ? "Logging…" : "✓ Log clean now"}
+            </button>
+          </div>
         </div>
 
         {/* Tabs */}
@@ -837,9 +880,10 @@ function StoreEditor({ store, mgr, onSave, saved }) {
 /* ═══════════════════════════════════════════════
    RATINGS CHART
 ═══════════════════════════════════════════════ */
-function RatingsChart({ reviews }) {
-  if (!reviews.length) return (
-    <div style={{textAlign:"center",color:"rgba(255,255,255,0.25)",fontSize:"13px",padding:"2rem"}}>No data yet — reviews will appear here</div>
+function RatingsChart({ reviews, storeFilter }) {
+  const filtered = storeFilter ? reviews.filter(r=>r.storeId===storeFilter) : reviews;
+  if (!filtered.length) return (
+    <div style={{textAlign:"center",color:"rgba(255,255,255,0.25)",fontSize:"13px",padding:"2rem"}}>No data yet{storeFilter?" for this store":""} — reviews will appear here</div>
   );
 
   // Group reviews by day for last 30 days
@@ -851,7 +895,7 @@ function RatingsChart({ reviews }) {
   });
 
   const byDay = {};
-  reviews.forEach(r => {
+  filtered.forEach(r => {
     const day = r.timestamp ? r.timestamp.slice(0,10) : null;
     if (!day) return;
     if (!byDay[day]) byDay[day] = [];
@@ -867,7 +911,7 @@ function RatingsChart({ reviews }) {
   // Filter to days that have data for a cleaner look, but keep at least some context
   const hasAny = points.some(p => p.avg !== null);
   if (!hasAny) return (
-    <div style={{textAlign:"center",color:"rgba(255,255,255,0.25)",fontSize:"13px",padding:"2rem"}}>No data in the last 30 days</div>
+    <div style={{textAlign:"center",color:"rgba(255,255,255,0.25)",fontSize:"13px",padding:"2rem"}}>No data in the last 30 days{storeFilter?" for this store":""}</div>
   );
 
   const W = 600, H = 180, PAD = { top:20, right:20, bottom:40, left:40 };
@@ -1073,8 +1117,15 @@ function AdminPortal({ onLogout }) {
             </div>
 
             <div className="dk-card" style={{marginTop:"1rem",padding:"1.25rem"}}>
-              <div style={{fontSize:"13px",fontWeight:500,marginBottom:"1.25rem"}}>Ratings over time</div>
-              <RatingsChart reviews={reviews} />
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"1.25rem",flexWrap:"wrap",gap:"8px"}}>
+                <div style={{fontSize:"13px",fontWeight:500}}>Ratings over time</div>
+                <select value={chartStore} onChange={e=>setChartStore(e.target.value)}
+                  style={{background:"#1a1a1a",border:"1px solid rgba(255,255,255,0.12)",borderRadius:"7px",color:"rgba(255,255,255,0.7)",padding:"6px 12px",fontSize:"12px",outline:"none",cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>
+                  <option value="">All stores</option>
+                  {STORES.map(s=><option key={s.id} value={s.id}>{s.name}, {s.state}</option>)}
+                </select>
+              </div>
+              <RatingsChart reviews={reviews} storeFilter={chartStore||null} />
             </div>
           </div>
         )}
