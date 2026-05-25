@@ -827,6 +827,136 @@ function StoreEditor({ store, mgr, onSave, saved }) {
 }
 
 /* ═══════════════════════════════════════════════
+   RATINGS CHART
+═══════════════════════════════════════════════ */
+function RatingsChart({ reviews }) {
+  if (!reviews.length) return (
+    <div style={{textAlign:"center",color:"rgba(255,255,255,0.25)",fontSize:"13px",padding:"2rem"}}>No data yet — reviews will appear here</div>
+  );
+
+  // Group reviews by day for last 30 days
+  const now = new Date();
+  const days = Array.from({length:30}, (_,i) => {
+    const d = new Date(now);
+    d.setDate(d.getDate() - (29 - i));
+    return d.toISOString().slice(0,10);
+  });
+
+  const byDay = {};
+  reviews.forEach(r => {
+    const day = r.timestamp ? r.timestamp.slice(0,10) : null;
+    if (!day) return;
+    if (!byDay[day]) byDay[day] = [];
+    byDay[day].push(r.rating);
+  });
+
+  const points = days.map(day => ({
+    day,
+    avg: byDay[day] ? byDay[day].reduce((a,b)=>a+b,0)/byDay[day].length : null,
+    count: byDay[day] ? byDay[day].length : 0,
+  }));
+
+  // Filter to days that have data for a cleaner look, but keep at least some context
+  const hasAny = points.some(p => p.avg !== null);
+  if (!hasAny) return (
+    <div style={{textAlign:"center",color:"rgba(255,255,255,0.25)",fontSize:"13px",padding:"2rem"}}>No data in the last 30 days</div>
+  );
+
+  const W = 600, H = 180, PAD = { top:20, right:20, bottom:40, left:40 };
+  const innerW = W - PAD.left - PAD.right;
+  const innerH = H - PAD.top - PAD.bottom;
+
+  const xScale = i => PAD.left + (i / (days.length - 1)) * innerW;
+  const yScale = v => PAD.top + innerH - ((v - 1) / 4) * innerH;
+
+  // Build SVG path from non-null points
+  const linePoints = points.map((p,i) => p.avg !== null ? {x: xScale(i), y: yScale(p.avg), ...p} : null).filter(Boolean);
+  const pathD = linePoints.map((p,i) => `${i===0?"M":"L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+  const areaD = linePoints.length > 1
+    ? pathD + ` L${linePoints[linePoints.length-1].x},${yScale(1)} L${linePoints[0].x},${yScale(1)} Z`
+    : "";
+
+  const rC = v => {
+    if (v >= 4.5) return "#27AE60";
+    if (v >= 3.5) return "#5CB85C";
+    if (v >= 2.5) return "#F0B429";
+    if (v >= 1.5) return "#E8762A";
+    return "#E24B4A";
+  };
+
+  // Y axis labels
+  const yLabels = [1,2,3,4,5];
+  // X axis: show label every 5 days
+  const xLabels = points.filter((_,i) => i % 5 === 0 || i === points.length-1);
+
+  const [tooltip, setTooltip] = React.useState(null);
+
+  return (
+    <div style={{overflowX:"auto"}}>
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{display:"block",fontFamily:"'DM Sans',sans-serif"}}>
+        {/* Grid lines */}
+        {yLabels.map(v => (
+          <g key={v}>
+            <line x1={PAD.left} y1={yScale(v)} x2={W-PAD.right} y2={yScale(v)}
+              stroke="rgba(255,255,255,0.06)" strokeWidth="1" />
+            <text x={PAD.left-8} y={yScale(v)+4} textAnchor="end" fill="rgba(255,255,255,0.3)" fontSize="10">{v}★</text>
+          </g>
+        ))}
+
+        {/* Area fill */}
+        {areaD && <path d={areaD} fill="rgba(218,41,28,0.08)" />}
+
+        {/* Line */}
+        {pathD && <path d={pathD} fill="none" stroke="#DA291C" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />}
+
+        {/* Data points */}
+        {linePoints.map((p,i) => (
+          <g key={i}>
+            <circle cx={p.x} cy={p.y} r="4" fill={rC(p.avg)} stroke="#0A0A0A" strokeWidth="1.5"
+              style={{cursor:"pointer"}}
+              onMouseEnter={()=>setTooltip(p)}
+              onMouseLeave={()=>setTooltip(null)}
+            />
+          </g>
+        ))}
+
+        {/* Tooltip */}
+        {tooltip && (
+          <g>
+            <rect x={Math.min(tooltip.x-50, W-120)} y={tooltip.y-52} width="110" height="44" rx="6"
+              fill="#1a1a1a" stroke="rgba(255,255,255,0.12)" strokeWidth="1" />
+            <text x={Math.min(tooltip.x-50, W-120)+55} y={tooltip.y-34} textAnchor="middle" fill="white" fontSize="11" fontWeight="bold">
+              {tooltip.avg.toFixed(1)}★ avg
+            </text>
+            <text x={Math.min(tooltip.x-50, W-120)+55} y={tooltip.y-18} textAnchor="middle" fill="rgba(255,255,255,0.5)" fontSize="10">
+              {tooltip.count} review{tooltip.count!==1?"s":""} · {tooltip.day.slice(5).replace("-","/")}
+            </text>
+          </g>
+        )}
+
+        {/* X axis labels */}
+        {xLabels.map((p,i) => {
+          const idx = points.indexOf(p);
+          return (
+            <text key={i} x={xScale(idx)} y={H-8} textAnchor="middle" fill="rgba(255,255,255,0.3)" fontSize="9">
+              {p.day.slice(5).replace("-","/")}
+            </text>
+          );
+        })}
+
+        {/* Alert threshold line */}
+        <line x1={PAD.left} y1={yScale(2)} x2={W-PAD.right} y2={yScale(2)}
+          stroke="rgba(226,75,74,0.3)" strokeWidth="1" strokeDasharray="4,3" />
+        <text x={W-PAD.right+4} y={yScale(2)+4} fill="rgba(226,75,74,0.5)" fontSize="9">alert</text>
+      </svg>
+      <div style={{fontSize:"11px",color:"rgba(255,255,255,0.25)",marginTop:"6px",textAlign:"right"}}>
+        Last 30 days · Hover points for detail · Dashed line = alert threshold
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════
    ADMIN PORTAL (all stores)
 ═══════════════════════════════════════════════ */
 function AdminPortal({ onLogout }) {
@@ -932,6 +1062,11 @@ function AdminPortal({ onLogout }) {
                   <div style={{fontSize:"12px",color:"rgba(255,255,255,0.3)",minWidth:"70px",textAlign:"right"}}>{s.count} reviews</div>
                 </div>
               ))}
+            </div>
+
+            <div className="dk-card" style={{marginTop:"1rem",padding:"1.25rem"}}>
+              <div style={{fontSize:"13px",fontWeight:500,marginBottom:"1.25rem"}}>Ratings over time</div>
+              <RatingsChart reviews={reviews} />
             </div>
           </div>
         )}
