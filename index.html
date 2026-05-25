@@ -59,9 +59,20 @@ const saveEJConfig = (cfg) => localStorage.setItem(EJ_KEY, JSON.stringify(cfg));
 /* ─── AUTH ─── */
 const ADMIN_PIN  = "130197";   // dev/admin PIN
 const AUTH_KEY   = "cleancheck_auth";
-const getAuth    = () => { try { return JSON.parse(localStorage.getItem(AUTH_KEY)||"null"); } catch { return null; } };
-const saveAuth   = (a) => localStorage.setItem(AUTH_KEY, JSON.stringify(a));
-const clearAuth  = () => localStorage.removeItem(AUTH_KEY);
+const SESSION_DURATION = 60 * 60 * 1000; // 1 hour in ms
+const getAuth = () => {
+  try {
+    const a = JSON.parse(localStorage.getItem(AUTH_KEY)||"null");
+    if (!a) return null;
+    if (a.expiresAt && Date.now() > a.expiresAt) {
+      localStorage.removeItem(AUTH_KEY);
+      return null;
+    }
+    return a;
+  } catch { return null; }
+};
+const saveAuth  = (a) => localStorage.setItem(AUTH_KEY, JSON.stringify({ ...a, expiresAt: Date.now() + SESSION_DURATION }));
+const clearAuth = () => localStorage.removeItem(AUTH_KEY);
 
 /* ─── STORE MANAGER DATA (Supabase) ─── */
 const getManagerData = async () => {
@@ -187,6 +198,13 @@ const getReviews = async (storeId) => {
       timestamp: r.timestamp,
     }));
   } catch(e) { console.error("Supabase fetch error", e); return []; }
+};
+
+const resolveReview = async (id) => {
+  try {
+    await sb.from("reviews").update({ resolved:true, resolved_at:new Date().toISOString() }).eq("id", id);
+    return true;
+  } catch(e) { console.error("resolveReview error", e); return false; }
 };
 
 const seedIfEmpty = () => {};
@@ -333,6 +351,58 @@ function QRCard({ store, size=180, showPrint=true }) {
           style={{background:"#DA291C",color:"white",border:"none",borderRadius:"8px",padding:"9px 20px",fontSize:"13px",fontWeight:500,cursor:"pointer",display:"flex",alignItems:"center",gap:"6px"}}>
           🖨️ Print QR code
         </button>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════
+   REVIEW ROW (with resolve button)
+═══════════════════════════════════════════════ */
+function ReviewRow({ r, showStore=false }) {
+  const store = STORES.find(s=>s.id===r.storeId);
+  const rtags = Array.isArray(r.tags)?r.tags:[];
+  const [resolved, setResolved] = useState(r.resolved||false);
+  const [resolving, setResolving] = useState(false);
+
+  const handleResolve = async () => {
+    setResolving(true);
+    const ok = await resolveReview(r.id);
+    if (ok) setResolved(true);
+    setResolving(false);
+  };
+
+  return (
+    <div style={{padding:"1rem",borderBottom:"1px solid rgba(255,255,255,0.06)",opacity:resolved?0.5:1,transition:"opacity 0.3s"}}>
+      <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:"6px"}}>
+        <div>
+          <span style={{color:"#FFC72C",fontSize:"13px"}}>{"★".repeat(r.rating)}{"☆".repeat(5-r.rating)}</span>
+          <span style={{fontSize:"12px",fontWeight:500,color:RATING_COLORS[r.rating]||"#ccc",marginLeft:"6px"}}>{STAR_LABELS[r.rating]}</span>
+          {resolved && <span style={{fontSize:"11px",background:"rgba(39,174,96,0.15)",color:"#6fcf97",borderRadius:"999px",padding:"2px 8px",marginLeft:"8px"}}>✓ Resolved</span>}
+        </div>
+        <div style={{fontSize:"11px",color:"rgba(255,255,255,0.28)",textAlign:"right"}}>
+          <div>{timeAgo(r.timestamp)}</div>
+          {showStore && <div style={{color:"rgba(255,255,255,0.45)",marginTop:"2px"}}>{store?.name}, {store?.state}</div>}
+        </div>
+      </div>
+      {rtags.length>0 && <div style={{display:"flex",flexWrap:"wrap",gap:"4px",marginBottom:"6px"}}>
+        {rtags.map((t,i)=>{
+          const tag=ISSUE_TAGS.find(x=>`${x.icon} ${x.label}`===t||x.id===t);
+          return <span key={i} style={{fontSize:"11px",background:tag?.neg?"rgba(226,75,74,0.15)":"rgba(39,174,96,0.15)",color:tag?.neg?"#ff8585":"#6fcf97",borderRadius:"999px",padding:"2px 8px"}}>{t}</span>;
+        })}
+      </div>}
+      {r.comment && <div style={{fontSize:"13px",color:"rgba(255,255,255,0.45)",fontStyle:"italic",marginBottom:"6px"}}>"{r.comment}"</div>}
+      {r.rating<=2 && !resolved && (
+        <div style={{display:"flex",alignItems:"center",gap:"8px",marginTop:"8px",flexWrap:"wrap"}}>
+          <div style={{fontSize:"11px",background:"rgba(226,75,74,0.1)",border:"1px solid rgba(226,75,74,0.3)",borderRadius:"6px",padding:"4px 10px",color:"#ff8585"}}>⚡ Alert sent</div>
+          <button onClick={handleResolve} disabled={resolving}
+            style={{fontSize:"11px",background:"rgba(39,174,96,0.12)",border:"1px solid rgba(39,174,96,0.3)",borderRadius:"6px",padding:"4px 10px",color:"#6fcf97",cursor:"pointer",fontFamily:"'DM Sans',sans-serif",opacity:resolving?0.6:1}}>
+            {resolving ? "Resolving…" : "✓ Mark resolved"}
+          </button>
+        </div>
+      )}
+      {r.rating<=2 && resolved && (
+        <div style={{fontSize:"11px",background:"rgba(39,174,96,0.1)",border:"1px solid rgba(39,174,96,0.3)",borderRadius:"6px",padding:"4px 10px",color:"#6fcf97",display:"inline-block",marginTop:"6px"}}>✓ Resolved</div>
       )}
     </div>
   );
@@ -686,22 +756,7 @@ function ManagerPortal({ storeId, onLogout }) {
             <div style={{maxHeight:"520px",overflowY:"auto"}}>
               {loading && <div style={{padding:"2rem",textAlign:"center",color:"rgba(255,255,255,0.3)",fontSize:"14px"}}>Loading…</div>}
               {!loading&&reviews.length===0 && <div style={{padding:"2rem",textAlign:"center",color:"rgba(255,255,255,0.25)",fontSize:"14px"}}>No reviews yet — share your QR code!</div>}
-              {reviews.map(r=>{
-                const rtags=Array.isArray(r.tags)?r.tags:[];
-                return (
-                  <div key={r.id} className="rrow">
-                    <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:"6px"}}>
-                      <div>
-                        <span style={{color:"#FFC72C",fontSize:"13px"}}>{"★".repeat(r.rating)}{"☆".repeat(5-r.rating)}</span>
-                        <span style={{fontSize:"12px",fontWeight:500,color:RATING_COLORS[r.rating]||"#ccc",marginLeft:"6px"}}>{STAR_LABELS[r.rating]}</span>
-                      </div>
-                      <div style={{fontSize:"11px",color:"rgba(255,255,255,0.28)"}}>{timeAgo(r.timestamp)}</div>
-                    </div>
-                    {rtags.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:"4px",marginBottom:"5px"}}>
-                      {rtags.map((t,i)=>{
-                        const tag=ISSUE_TAGS.find(x=>`${x.icon} ${x.label}`===t||x.id===t);
-                        return <span key={i} style={{fontSize:"11px",background:tag?.neg?"rgba(226,75,74,0.15)":"rgba(39,174,96,0.15)",color:tag?.neg?"#ff8585":"#6fcf97",borderRadius:"999px",padding:"2px 8px"}}>{t}</span>;
-                      })}
+              {reviews.map(r=><ReviewRow key={r.id} r={r} showStore={false} />)}
                     </div>}
                     {r.comment&&<div style={{fontSize:"13px",color:"rgba(255,255,255,0.45)",fontStyle:"italic"}}>"{r.comment}"</div>}
                     {r.rating<=2&&<div style={{marginTop:"6px",fontSize:"11px",background:"rgba(226,75,74,0.1)",border:"1px solid rgba(226,75,74,0.3)",borderRadius:"6px",padding:"3px 8px",color:"#ff8585",display:"inline-block"}}>⚡ Alert sent</div>}
@@ -1018,6 +1073,7 @@ function AdminPortal({ onLogout }) {
   const [activeTab, setActiveTab] = useState("overview");
   const [saved, setSaved]   = useState(null);
   const [adminLoading, setAdminLoading] = useState(true);
+  const [chartStore,   setChartStore]   = useState("");
 
   useEffect(()=>{
     const load = async () => {
@@ -1443,26 +1499,7 @@ function Dashboard({ onBack }) {
             <div className="dk-card" style={{maxHeight:"520px",overflowY:"auto"}}>
               {loading&&<div style={{padding:"3rem",textAlign:"center",color:"rgba(255,255,255,0.25)",fontSize:"14px",display:"flex",alignItems:"center",justifyContent:"center",gap:"8px"}}><span style={{width:16,height:16,border:"2px solid rgba(255,255,255,0.1)",borderTopColor:"rgba(255,255,255,0.4)",borderRadius:"50%",display:"inline-block",animation:"spin 0.7s linear infinite"}}></span>Loading reviews…</div>}
               {!loading&&sorted.length===0&&<div style={{padding:"3rem",textAlign:"center",color:"rgba(255,255,255,0.25)",fontSize:"14px"}}>No reviews yet</div>}
-              {sorted.map(r=>{
-                const store=STORES.find(s=>s.id===r.storeId);
-                const rtags=Array.isArray(r.tags)?r.tags:[];
-                return (
-                  <div key={r.id} className="rrow">
-                    <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:"6px"}}>
-                      <div>
-                        <span style={{color:"#FFC72C",fontSize:"13px"}}>{"★".repeat(r.rating)}{"☆".repeat(5-r.rating)}</span>
-                        <span style={{fontSize:"12px",fontWeight:500,color:RATING_COLORS[r.rating]||"#ccc",marginLeft:"6px"}}>{STAR_LABELS[r.rating]}</span>
-                      </div>
-                      <div style={{fontSize:"11px",color:"rgba(255,255,255,0.28)",textAlign:"right"}}>
-                        <div>{timeAgo(r.timestamp)}</div>
-                        {selected==="all"&&<div style={{color:"rgba(255,255,255,0.45)",marginTop:"2px"}}>{store?.name}, {store?.state}</div>}
-                      </div>
-                    </div>
-                    {rtags.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:"4px",marginBottom:"6px"}}>
-                      {rtags.map((t,i)=>{
-                        const tag=ISSUE_TAGS.find(x=>`${x.icon} ${x.label}`===t||x.id===t);
-                        return <span key={i} style={{fontSize:"11px",background:tag?.neg?"rgba(226,75,74,0.15)":"rgba(39,174,96,0.15)",color:tag?.neg?"#ff8585":"#6fcf97",borderRadius:"999px",padding:"2px 8px"}}>{t}</span>;
-                      })}
+              {sorted.map(r=><ReviewRow key={r.id} r={r} showStore={selected==="all"} />)}
                     </div>}
                     {r.comment&&<div style={{fontSize:"13px",color:"rgba(255,255,255,0.45)",fontStyle:"italic"}}>"{r.comment}"</div>}
                     {r.rating<=2&&<div style={{marginTop:"8px",fontSize:"11px",background:"rgba(226,75,74,0.1)",border:"1px solid rgba(226,75,74,0.3)",borderRadius:"6px",padding:"4px 10px",color:"#ff8585",display:"inline-block"}}>⚡ Alert sent</div>}
