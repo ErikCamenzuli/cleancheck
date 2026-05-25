@@ -813,7 +813,7 @@ function ReviewPage({ storeId }) {
           )}
           {comment&&<p style={{fontSize:"13px",color:"#777",margin:0,fontStyle:"italic"}}>"{comment}"</p>}
         </div>
-        <button onClick={()=>{window.history.pushState({},"","/");window.location.reload();}}
+        <button onClick={()=>{ window.location.href = window.location.pathname.replace(/\/[^\/]*$/, '/') || '/'; }}
           style={{background:"#DA291C",color:"white",border:"none",borderRadius:"999px",padding:"12px 28px",fontSize:"14px",fontWeight:500,cursor:"pointer"}}>
           ← Back to CleanCheck
         </button>
