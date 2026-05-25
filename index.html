@@ -4,6 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>CleanCheck — McDonald's Bathroom Feedback</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23DA291C'/><text x='16' y='23' font-size='20' font-family='serif' font-weight='bold' text-anchor='middle' fill='%23FFC72C'>C</text></svg>" />
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Syne:wght@700;800&display=swap" rel="stylesheet" />
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -772,8 +773,8 @@ function Landing({ onNav }) {
           <p style={{fontSize:"17px",color:"rgba(255,255,255,0.5)",lineHeight:1.75,maxWidth:"500px",marginBottom:"2.5rem",fontWeight:300}}>Customers scan a QR code, rate the bathroom, and the store manager is notified by email instantly. Built to scale across every McDonald's in Australia.</p>
         </div>
         <div className="fade-up-2" style={{display:"flex",gap:"12px",flexWrap:"wrap",marginBottom:"4rem"}}>
-          <button className="hero-btn btn-red" onClick={()=>onNav("login")}>Staff portal →</button>
-          <button className="hero-btn btn-ghost" onClick={()=>onNav("storepicker")}>Try a review</button>
+          <button className="hero-btn btn-red" onClick={()=>onNav("storepicker")}>Review a Store →</button>
+          <button className="hero-btn btn-ghost" onClick={()=>onNav("login")}>Staff login</button>
         </div>
         <div className="fade-up-3" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:"12px",marginBottom:"4rem"}}>
           {[{n:STORES.length,s:"locations",suf:""},{n:count,s:"reviews",suf:"+"},{n:"< 30",s:"secs to review",suf:"s"},{n:"100",s:"auto-routed",suf:"%"}].map(({n,s,suf})=>(
@@ -781,12 +782,27 @@ function Landing({ onNav }) {
           ))}
         </div>
         <div className="fade-up-4">
-          <div style={{fontSize:"11px",color:"rgba(255,255,255,0.3)",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:"0.75rem"}}>Try a live store review</div>
-          <div style={{display:"flex",flexWrap:"wrap",gap:"7px",marginBottom:"3rem"}}>
-            {STORES.map(s=><a key={s.id} className="store-link" href={`?store=${s.id}`}><span style={{width:6,height:6,borderRadius:"50%",background:"#DA291C",display:"inline-block"}}></span>{s.name}, {s.state}</a>)}
+          {/* How it works */}
+          <div style={{marginBottom:"3rem"}}>
+            <div style={{fontSize:"11px",color:"rgba(255,255,255,0.3)",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:"1.5rem"}}>How it works</div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:"1px",background:"rgba(255,255,255,0.06)",borderRadius:"14px",overflow:"hidden"}}>
+              {[
+                {n:"1",t:"Customer scans",d:"A QR code is printed inside the bathroom. Customer points their phone camera at it — no app needed."},
+                {n:"2",t:"Leaves a rating",d:"A simple star rating, optional issue tags, and a comment. Takes under 30 seconds."},
+                {n:"3",t:"Manager is notified",d:"An email goes directly to that store's manager instantly. Low ratings are flagged as urgent."},
+              ].map(({n,t,d})=>(
+                <div key={n} style={{background:"#141414",padding:"1.75rem"}}>
+                  <div style={{fontFamily:"'Syne',sans-serif",fontSize:"32px",fontWeight:800,color:"#DA291C",marginBottom:"0.75rem",opacity:0.4}}>{n}</div>
+                  <div style={{fontSize:"15px",fontWeight:500,marginBottom:"0.5rem",color:"white"}}>{t}</div>
+                  <div style={{fontSize:"13px",color:"rgba(255,255,255,0.4)",lineHeight:1.6}}>{d}</div>
+                </div>
+              ))}
+            </div>
           </div>
+
+          {/* Features */}
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:"12px"}}>
-            {[{i:"📱",t:"Scan & review",d:"Customers scan the QR code and leave feedback in under 30 seconds."},{i:"⚡",t:"Instant alerts",d:"Store managers get an email the moment a low rating is submitted."},{i:"📊",t:"Live dashboard",d:"Every review is tracked centrally — ratings, trends and alerts all in one place."}].map(({i,t,d})=>(
+            {[{i:"📱",t:"No app needed",d:"Works in any phone browser. Customers scan and review instantly with no downloads."},{i:"⚡",t:"Instant alerts",d:"Store managers get an email the moment a low rating is submitted."},{i:"📊",t:"Live dashboard",d:"Every review is tracked centrally — ratings, trends and alerts all in one place."}].map(({i,t,d})=>(
               <div key={t} className="feat-card"><div style={{fontSize:"26px",marginBottom:"0.75rem"}}>{i}</div><div style={{fontSize:"14px",fontWeight:500,marginBottom:"0.5rem"}}>{t}</div><div style={{fontSize:"13px",color:"rgba(255,255,255,0.4)",lineHeight:1.6}}>{d}</div></div>
             ))}
           </div>
