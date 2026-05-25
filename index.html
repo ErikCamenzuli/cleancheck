@@ -626,6 +626,7 @@ function ReviewPage({ storeId }) {
     await saveReview({storeId:store.id,rating,tags:tagLabels,comment,isAlert});
     const mgr=await getStoreManager(storeId);
     const toEmail=(mgr.email&&mgr.email.trim())||getEJConfig().notifyEmail;
+    console.log("CleanCheck routing — mgr:", mgr, "toEmail:", toEmail, "cfg.notifyEmail:", getEJConfig().notifyEmail);
     const res=await sendEmail({storeName:`${store.name}, ${store.state}`,storeAddress:store.address,rating,ratingLabel:STAR_LABELS[rating],tags:tagLabels,comment,isAlert,toEmail});
     setEmailSent(res.ok); setSubmitting(false); setSubmitted(true);
   };
