@@ -132,7 +132,7 @@ async function sendEmail({ storeName, storeAddress, rating, ratingLabel, tags, c
     emailjs.init(cfg.publicKey);
     const subject = isAlert ? `🚨 URGENT: ${rating}★ rating at ${storeName}` : `⭐ New ${rating}★ review — ${storeName}`;
     await emailjs.send(cfg.serviceId, cfg.templateId, {
-      to_email:cfg.notifyEmail, to_name:"CleanCheck Manager",
+      to_email:toEmail||cfg.notifyEmail, to_name:"CleanCheck Manager",
       store_name:storeName, store_address:storeAddress,
       rating_stars:"★".repeat(rating)+"☆".repeat(5-rating),
       rating_label:ratingLabel, rating_number:String(rating),
