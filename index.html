@@ -520,7 +520,7 @@ function ManagerPortal({ storeId, onLogout }) {
   const [activeTab,setActiveTab]=useState("overview"); const [loading,setLoading]=useState(true);
 
   useEffect(()=>{
-    const load=async()=>{ try { setLoading(true); const [r,mgr]=await Promise.all([getReviews(storeId),getStoreManager(storeId)]); setReviews(r); setName(mgr.name||""); setEmail(mgr.email||""); setLastCleaned(mgr.last_cleaned_at||null); setLoading(false); };
+    const load=async()=>{ try { setLoading(true); const [r,mgr]=await Promise.all([getReviews(storeId),getStoreManager(storeId)]); setReviews(r); setName(mgr.name||""); setEmail(mgr.email||""); setLastCleaned(mgr.last_cleaned_at||null); } catch(e){console.error("Portal load error:",e);} finally{setLoading(false);} };
     load();
   },[storeId]);
 
