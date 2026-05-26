@@ -82,9 +82,12 @@ const getManagerData = async () => {
 };
 const getStoreManager = async (storeId) => {
   try {
-    const { data, error } = await sb.from("managers").select("*").eq("store_id", storeId).single();
-    if (error || !data) return { name:"", email:"", pin:"", last_cleaned_at:null };
-    return { name:data.name||"", email:data.email||"", pin:data.pin||"", last_cleaned_at:data.last_cleaned_at||null };
+    // Use maybeSingle() instead of single() — single() throws a 406 error if no row found
+    const { data, error } = await sb.from("managers").select("*").eq("store_id", storeId).maybeSingle();
+    if (error) { console.error("getStoreManager error for", storeId, error); return { name:"", email:"", pin:"" }; }
+    if (!data) { console.warn("getStoreManager: no manager found for store_id =", storeId); return { name:"", email:"", pin:"" }; }
+    console.log("getStoreManager found:", storeId, "email:", data.email);
+    return { name:data.name||"", email:data.email||"", pin:data.pin||"" };
   } catch(e) { return { name:"", email:"", pin:"", last_cleaned_at:null }; }
 };
 const saveStoreManager = async (storeId, data) => {
