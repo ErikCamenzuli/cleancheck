@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
+<meta http-equiv="Expires" content="0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CleanCheck — McDonald's Bathroom Feedback</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23DA291C'/><text x='16' y='23' font-size='20' font-family='serif' font-weight='bold' text-anchor='middle' fill='%23FFC72C'>C</text></svg>" />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Syne:wght@700;800&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body { font-family: 'DM Sans', sans-serif; }
+  #root { height: 100%; }
+  input, button, select, textarea { font-family: inherit; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes fadeUp { from { opacity:0; transform:translateY(18px); } to { opacity:1; transform:translateY(0); } }
+  @media (min-width: 600px) { .mgr-grid { grid-template-columns: 1fr 260px !important; } }
+  @media (max-width: 600px) {
+    .tab-btn { font-size: 12px !important; margin-right: 12px !important; }
+    .store-card { padding: 1rem !important; }
+    .red-btn { width: 100%; text-align: center; }
+  }
+  .fade-up   { animation: fadeUp 0.55s ease both; }
+  .fade-up-2 { animation: fadeUp 0.55s 0.12s ease both; }
+  .fade-up-3 { animation: fadeUp 0.55s 0.24s ease both; }
+  .fade-up-4 { animation: fadeUp 0.55s 0.36s ease both; }
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 2px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect } = React;
+
+/* ─── EMAILJS CONFIG ─── */
+const DEFAULT_CONFIG = {
+  serviceId:   "service_b5ta3pi",
+  templateId:  "template_xrdy1u4",
+  publicKey:   "AsP-BCIALDKZmDdRQ",
+  notifyEmail: "cleanbathroomsaus@gmail.com",
+};
+const EJ_KEY = "cleancheck_ej_config";
+const getEJConfig = () => { try { return { ...DEFAULT_CONFIG, ...JSON.parse(localStorage.getItem(EJ_KEY)||"{}") }; } catch { return DEFAULT_CONFIG; } };
+const saveEJConfig = (cfg) => localStorage.setItem(EJ_KEY, JSON.stringify(cfg));
+
+/* ─── AUTH ─── */
+const ADMIN_PIN = "130197";
+const AUTH_KEY  = "cleancheck_auth";
+const SESSION_DURATION = 60 * 60 * 1000;
+const getAuth = () => {
+  try {
+    const a = JSON.parse(localStorage.getItem(AUTH_KEY)||"null");
+    if (!a) return null;
+    if (a.expiresAt && Date.now() > a.expiresAt) { localStorage.removeItem(AUTH_KEY); return null; }
+    return a;
+  } catch { return null; }
+};
+const saveAuth  = (a) => localStorage.setItem(AUTH_KEY, JSON.stringify({ ...a, expiresAt: Date.now() + SESSION_DURATION }));
+const clearAuth = () => localStorage.removeItem(AUTH_KEY);
+
+/* ─── SUPABASE ─── */
+const SUPABASE_URL  = "https://atmhinaflailbgprfwlb.supabase.co";
+const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF0bWhpbmFmbGFpbGJncHJmd2xiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk2ODI2NTEsImV4cCI6MjA5NTI1ODY1MX0.h3f2GaT-jstqQqidE6KwS70CLAE3do2_BinrwJc7qPc";
+const sbLib = window.supabase || window.Supabase;
+if (!sbLib) console.error("Supabase library failed to load!");
+const sb = sbLib ? sbLib.createClient(SUPABASE_URL, SUPABASE_ANON) : null;
+
+/* ─── STORE MANAGER DATA ─── */
+const getManagerData = async () => {
+  try {
+    const { data, error } = await sb.from("managers").select("*");
+    if (error) throw error;
+    const map = {};
+    (data||[]).forEach(m => { map[m.store_id] = { name:m.name, email:m.email, pin:m.pin }; });
+    return map;
+  } catch(e) { console.error("getManagerData error", e); return {}; }
+};
+const getStoreManager = async (storeId) => {
+  try {
+    // Use maybeSingle() instead of single() — single() throws a 406 error if no row found
+    const { data, error } = await sb.from("managers").select("*").eq("store_id", storeId).maybeSingle();
+    if (error) { console.error("getStoreManager error for", storeId, error); return { name:"", email:"", pin:"" }; }
+    if (!data) { console.warn("getStoreManager: no manager found for store_id =", storeId); return { name:"", email:"", pin:"" }; }
+    console.log("getStoreManager found:", storeId, "email:", data.email);
+    return { name:data.name||"", email:data.email||"", pin:data.pin||"" };
+  } catch(e) { return { name:"", email:"", pin:"", last_cleaned_at:null }; }
+};
+const saveStoreManager = async (storeId, data) => {
+  try {
+    const payload = { store_id:storeId, name:data.name||"", email:data.email||"", pin:data.pin||"", updated_at:new Date().toISOString() };
+    if (data.last_cleaned_at !== undefined) payload.last_cleaned_at = data.last_cleaned_at;
+    await sb.from("managers").upsert(payload, { onConflict:"store_id" });
+  } catch(e) { console.error("saveStoreManager error", e); }
+};
+const logCleaned = async (storeId) => {
+  try {
+    const now = new Date().toISOString();
+    await sb.from("managers").upsert({ store_id:storeId, last_cleaned_at:now, updated_at:now }, { onConflict:"store_id" });
+    return now;
+  } catch(e) { console.error("logCleaned error", e); return null; }
+};
+
+/* ─── REVIEWS ─── */
+const saveReview = async (r) => {
+  if (!sb) { console.error("Supabase not loaded — cannot save review"); return; }
+  try {
+    await sb.from("reviews").insert({ store_id:r.storeId, rating:r.rating, tags:r.tags||[], comment:r.comment||"", is_alert:r.isAlert||false });
+  } catch(e) { console.error("Supabase save error", e); }
+};
+const getReviews = async (storeId) => {
+  try {
+    let q = sb.from("reviews").select("*").order("timestamp", { ascending:false });
+    if (storeId) q = q.eq("store_id", storeId);
+    const { data, error } = await q;
+    if (error) throw error;
+    return (data||[]).map(r => ({ id:r.id, storeId:r.store_id, rating:r.rating, tags:r.tags||[], comment:r.comment||"", isAlert:r.is_alert, resolved:r.resolved||false, timestamp:r.timestamp }));
+  } catch(e) { console.error("Supabase fetch error", e); return []; }
+};
+const resolveReview = async (id) => {
+  if (!sb) { console.error("Supabase not loaded"); return false; }
+  try {
+    const { error } = await sb.from("reviews").update({ resolved:true, resolved_at:new Date().toISOString() }).eq("id", id);
+    if (error) { console.error("resolveReview Supabase error:", error); return false; }
+    console.log("resolveReview SUCCESS for id:", id);
+    return true;
+  } catch(e) { console.error("resolveReview exception:", e); return false; }
+};
+
+/* ─── EMAIL ─── */
+async function sendEmail({ storeName, storeAddress, rating, ratingLabel, tags, comment, isAlert, toEmail }) {
+  const cfg = getEJConfig();
+  if (!cfg.serviceId || !cfg.templateId || !cfg.publicKey) return { ok:false, error:"not_configured" };
+  try {
+    emailjs.init(cfg.publicKey);
+    const subject = isAlert ? `🚨 URGENT: ${rating}★ rating at ${storeName}` : `⭐ New ${rating}★ review — ${storeName}`;
+    await emailjs.send(cfg.serviceId, cfg.templateId, {
+      to_email:toEmail||cfg.notifyEmail, to_name:"CleanCheck Manager",
+      store_name:storeName, store_address:storeAddress,
+      rating_stars:"★".repeat(rating)+"☆".repeat(5-rating),
+      rating_label:ratingLabel, rating_number:String(rating),
+      tags:tags.length?tags.join(", "):"None selected",
+      comment:comment||"No comment left.",
+      is_alert:isAlert?"YES — IMMEDIATE ACTION REQUIRED":"No",
+      subject, timestamp:new Date().toLocaleString("en-AU"),
+    });
+    return { ok:true };
+  } catch(e) { return { ok:false, error:e?.text||e?.message||"Unknown error" }; }
+}
+
+/* ─── STORES ─── */
+const STORES = [
+  { id:"melb-bourke",   name:"Bourke Street",    city:"Melbourne", state:"VIC", address:"205 Bourke St, Melbourne VIC 3000"   },
+  { id:"melb-swanston", name:"Swanston Street",  city:"Melbourne", state:"VIC", address:"318 Swanston St, Melbourne VIC 3000" },
+  { id:"syd-george",    name:"George Street",    city:"Sydney",    state:"NSW", address:"580 George St, Sydney NSW 2000"      },
+  { id:"syd-pitt",      name:"Pitt Street",      city:"Sydney",    state:"NSW", address:"162 Pitt St, Sydney NSW 2000"        },
+  { id:"bris-queen",    name:"Queen Street Mall",city:"Brisbane",  state:"QLD", address:"Queen St Mall, Brisbane QLD 4000"   },
+  { id:"per-hay",       name:"Hay Street",       city:"Perth",     state:"WA",  address:"782 Hay St, Perth WA 6000"          },
+  { id:"adl-rundle",    name:"Rundle Mall",      city:"Adelaide",  state:"SA",  address:"139 Rundle Mall, Adelaide SA 5000"  },
+];
+const getStore      = (id) => STORES.find(s=>s.id===id) || STORES[0];
+const STAR_LABELS   = ["","Very poor","Poor","Okay","Good","Spotless!"];
+const RATING_COLORS = ["","#E24B4A","#E8762A","#F0B429","#5CB85C","#27AE60"];
+const ISSUE_TAGS = [
+  { id:"dirty-floors",   label:"Dirty floors",      icon:"🧹", neg:true  },
+  { id:"no-soap",        label:"No soap",           icon:"🧴", neg:true  },
+  { id:"no-paper",       label:"No paper",          icon:"🧻", neg:true  },
+  { id:"bad-smell",      label:"Bad smell",         icon:"💨", neg:true  },
+  { id:"blocked-toilet", label:"Blocked toilet",    icon:"🚽", neg:true  },
+  { id:"dryer-broken",   label:"Hand dryer broken", icon:"💧", neg:true  },
+  { id:"all-good",       label:"All good!",         icon:"✅", neg:false },
+  { id:"very-clean",     label:"Very clean",        icon:"✨", neg:false },
+  { id:"well-stocked",   label:"Well stocked",      icon:"👍", neg:false },
+];
+const avg       = arr => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0;
+const timeAgo   = ts => { const s=(Date.now()-new Date(ts))/1000; if(s<60) return "just now"; if(s<3600) return Math.floor(s/60)+"m ago"; if(s<86400) return Math.floor(s/3600)+"h ago"; return Math.floor(s/86400)+"d ago"; };
+const ratingColor = r => RATING_COLORS[Math.round(r)]||"#ccc";
+
+/* ═══════════════════════════════════════════════
+   PIN LOGIN UI
+═══════════════════════════════════════════════ */
+function PinLoginUI({ title, subtitle, onSubmit, onBack, error, loading, pin, setPin }) {
+  return (
+    <div style={{minHeight:"100vh",background:"#0A0A0A",display:"flex",alignItems:"center",justifyContent:"center",padding:"1rem"}}>
+      <div style={{width:"100%",maxWidth:"360px",animation:"fadeUp 0.5s ease both"}}>
+        <div style={{textAlign:"center",marginBottom:"2rem"}}>
+          <div style={{fontFamily:"'Syne',sans-serif",fontSize:"32px",fontWeight:800,color:"white",marginBottom:"6px"}}>clean<span style={{color:"#DA291C"}}>check</span></div>
+          <div style={{fontSize:"13px",color:"rgba(255,255,255,0.35)"}}>{subtitle}</div>
+        </div>
+        <div style={{background:"#141414",border:"1px solid rgba(255,255,255,0.08)",borderRadius:"16px",padding:"2rem"}}>
+          <div style={{fontSize:"12px",color:"rgba(255,255,255,0.4)",marginBottom:"8px",textTransform:"uppercase",letterSpacing:"0.06em"}}>{title}</div>
+          <input type="password" value={pin} onChange={e=>setPin(e.target.value)} onKeyDown={e=>e.key==="Enter"&&onSubmit()} placeholder="Enter PIN"
+            style={{width:"100%",background:"#1a1a1a",border:`1px solid ${error?"#E24B4A":"rgba(255,255,255,0.12)"}`,borderRadius:"10px",padding:"14px",color:"white",fontSize:"20px",letterSpacing:"0.3em",textAlign:"center",outline:"none",marginBottom:"8px"}} />
+          {error && <div style={{fontSize:"12px",color:"#E24B4A",marginBottom:"12px",textAlign:"center"}}>{error}</div>}
+          {!error && <div style={{height:"20px",marginBottom:"12px"}}></div>}
+          <button onClick={onSubmit} disabled={!pin||loading}
+            style={{width:"100%",background:pin?"#DA291C":"#2a2a2a",color:pin?"white":"rgba(255,255,255,0.3)",border:"none",borderRadius:"10px",padding:"14px",fontSize:"15px",fontWeight:600,cursor:pin?"pointer":"not-allowed",transition:"all 0.2s"}}>
+            {loading ? <span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:"8px"}}><span style={{width:16,height:16,border:"2px solid rgba(255,255,255,0.3)",borderTopColor:"white",borderRadius:"50%",display:"inline-block",animation:"spin 0.7s linear infinite"}}></span>Checking…</span> : "Login →"}
+          </button>
+        </div>
+        <button onClick={onBack} style={{display:"block",margin:"1.25rem auto 0",background:"transparent",border:"none",color:"rgba(255,255,255,0.25)",fontSize:"12px",cursor:"pointer"}}>← Back</button>
+      </div>
+    </div>
+  );
+}
+
+function StaffLoginPage({ onLogin, onBack }) {
+  const [pin, setPin] = useState(""); const [error, setError] = useState(""); const [loading, setLoading] = useState(false);
+  const handleSubmit = async () => {
+    if (!pin) return; setLoading(true);
+    const mgmt = await getManagerData();
+    const match = STORES.find(s => mgmt[s.id]?.pin === pin);
+    if (match) { saveAuth({ role:"manager", storeId:match.id }); onLogin({ role:"manager", storeId:match.id }); return; }
+    setError("Incorrect PIN. Please try again."); setLoading(false); setPin("");
+  };
+  return <PinLoginUI title="Store PIN" subtitle="Staff portal — enter your store PIN" onSubmit={handleSubmit} onBack={onBack} error={error} loading={loading} pin={pin} setPin={v=>{setPin(v);setError("");}} />;
+}
+
+function DevLoginPage({ onLogin, onBack }) {
+  const [pin, setPin] = useState(""); const [error, setError] = useState(""); const [loading, setLoading] = useState(false);
+  const handleSubmit = async () => {
+    if (!pin) return; setLoading(true);
+    await new Promise(r=>setTimeout(r,600));
+    if (pin === ADMIN_PIN) { saveAuth({ role:"dev", storeId:null }); onLogin({ role:"dev", storeId:null }); return; }
+    setError("Incorrect PIN."); setLoading(false); setPin("");
+  };
+  return <PinLoginUI title="Dev PIN" subtitle="Developer portal — restricted access" onSubmit={handleSubmit} onBack={onBack} error={error} loading={loading} pin={pin} setPin={v=>{setPin(v);setError("");}} />;
+}
+
+/* ═══════════════════════════════════════════════
+   QR CARD
+═══════════════════════════════════════════════ */
+function QRCard({ store, size=180, showPrint=true }) {
+  const base = window.location.href.split("?")[0];
+  const reviewUrl = `${base}?store=${store.id}`;
+  const qrImg = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(reviewUrl)}&color=DA291C&bgcolor=FFFFFF&margin=16`;
+  const handlePrint = () => {
+    const w = window.open("","_blank");
+    w.document.write(`<!DOCTYPE html><html><head><title>CleanCheck QR — ${store.name}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@800&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet"/>
+    <style>body{margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f5f5f3;font-family:'DM Sans',sans-serif;}
+    .c{background:white;border-radius:18px;padding:36px 36px 28px;text-align:center;max-width:320px;box-shadow:0 4px 32px rgba(0,0,0,0.1);}
+    .bar{height:6px;background:#DA291C;border-radius:3px;margin-bottom:20px;}
+    .logo{font-family:'Syne',sans-serif;font-size:26px;font-weight:800;color:#0A0A0A;margin-bottom:4px;}
+    .logo span{color:#DA291C;} .store{font-size:13px;color:#888;margin-bottom:20px;}
+    img{width:220px;height:220px;} .cta{font-size:15px;font-weight:500;color:#333;margin-top:16px;}
+    .sub{font-size:12px;color:#aaa;margin-top:4px;margin-bottom:12px;} .url{font-size:9px;color:#ccc;word-break:break-all;}
+    </style></head><body><div class="c"><div class="bar"></div>
+    <div class="logo">clean<span>check</span></div>
+    <div class="store">McDonald's ${store.name}, ${store.state}</div>
+    <img src="${qrImg}" alt="QR Code"/>
+    <div class="cta">📱 Scan to rate our bathroom</div>
+    <div class="sub">Takes less than 30 seconds · Anonymous</div>
+    <div class="url">${reviewUrl}</div>
+    </div></body></html>`);
+    w.document.close(); setTimeout(()=>w.print(),900);
+  };
+  return (
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:"12px"}}>
+      <div style={{background:"white",borderRadius:"12px",padding:"12px",display:"inline-block"}}>
+        <div style={{height:4,background:"#DA291C",borderRadius:2,marginBottom:"10px"}}></div>
+        <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:"14px",color:"#0A0A0A",textAlign:"center",marginBottom:"6px"}}>clean<span style={{color:"#DA291C"}}>check</span></div>
+        <img src={qrImg} alt="QR" style={{width:size,height:size,display:"block"}} />
+        <div style={{fontSize:"10px",color:"#888",textAlign:"center",marginTop:"6px"}}>📱 Scan to rate bathroom</div>
+      </div>
+      {showPrint && <button onClick={handlePrint} style={{background:"#DA291C",color:"white",border:"none",borderRadius:"8px",padding:"9px 20px",fontSize:"13px",fontWeight:500,cursor:"pointer"}}>🖨️ Print QR code</button>}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════
+   REVIEW ROW
+═══════════════════════════════════════════════ */
+function ReviewRow({ r, showStore=false, onResolve }) {
+  const store = STORES.find(s=>s.id===r.storeId);
+  const rtags = Array.isArray(r.tags)?r.tags:[];
+  // Use r.resolved from parent state directly — no local state
+  // so switching tabs won't reset it
+  const resolved = r.resolved || false;
+  const [resolving, setResolving] = useState(false);
+  const handleResolve = async () => {
+    setResolving(true);
+    const ok = await resolveReview(r.id);
+    if (ok && onResolve) onResolve(r.id);
+    setResolving(false);
+  };
+  return (
+    <div style={{padding:"1rem",borderBottom:"1px solid rgba(255,255,255,0.06)",opacity:resolved?0.5:1,transition:"opacity 0.3s"}}>
+      <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:"6px"}}>
+        <div>
+          <span style={{color:"#FFC72C",fontSize:"13px"}}>{"★".repeat(r.rating)}{"☆".repeat(5-r.rating)}</span>
+          <span style={{fontSize:"12px",fontWeight:500,color:RATING_COLORS[r.rating]||"#ccc",marginLeft:"6px"}}>{STAR_LABELS[r.rating]}</span>
+          {resolved && <span style={{fontSize:"11px",background:"rgba(39,174,96,0.15)",color:"#6fcf97",borderRadius:"999px",padding:"2px 8px",marginLeft:"8px"}}>✓ Resolved</span>}
+        </div>
+        <div style={{fontSize:"11px",color:"rgba(255,255,255,0.28)",textAlign:"right"}}>
+          <div>{timeAgo(r.timestamp)}</div>
+          {showStore && <div style={{color:"rgba(255,255,255,0.45)",marginTop:"2px"}}>{store?.name}, {store?.state}</div>}
+        </div>
+      </div>
+      {rtags.length>0 && <div style={{display:"flex",flexWrap:"wrap",gap:"4px",marginBottom:"6px"}}>
+        {rtags.map((t,i)=>{ const tag=ISSUE_TAGS.find(x=>`${x.icon} ${x.label}`===t||x.id===t); return <span key={i} style={{fontSize:"11px",background:tag?.neg?"rgba(226,75,74,0.15)":"rgba(39,174,96,0.15)",color:tag?.neg?"#ff8585":"#6fcf97",borderRadius:"999px",padding:"2px 8px"}}>{t}</span>; })}
+      </div>}
+      {r.comment && <div style={{fontSize:"13px",color:"rgba(255,255,255,0.45)",fontStyle:"italic",marginBottom:"6px"}}>"{r.comment}"</div>}
+      {r.rating<=2 && !resolved && (
+        <div style={{display:"flex",alignItems:"center",gap:"8px",marginTop:"8px",flexWrap:"wrap"}}>
+          <div style={{fontSize:"11px",background:"rgba(226,75,74,0.1)",border:"1px solid rgba(226,75,74,0.3)",borderRadius:"6px",padding:"4px 10px",color:"#ff8585"}}>⚡ Alert sent</div>
+          <button onClick={handleResolve} disabled={resolving}
+            style={{fontSize:"11px",background:"rgba(39,174,96,0.12)",border:"1px solid rgba(39,174,96,0.3)",borderRadius:"6px",padding:"4px 10px",color:"#6fcf97",cursor:"pointer",fontFamily:"'DM Sans',sans-serif",opacity:resolving?0.6:1}}>
+            {resolving?"Resolving…":"✓ Mark resolved"}
+          </button>
+        </div>
+      )}
+      {r.rating<=2 && resolved && <div style={{fontSize:"11px",background:"rgba(39,174,96,0.1)",border:"1px solid rgba(39,174,96,0.3)",borderRadius:"6px",padding:"4px 10px",color:"#6fcf97",display:"inline-block",marginTop:"6px"}}>✓ Resolved</div>}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════
+   RATINGS CHART
+═══════════════════════════════════════════════ */
+function RatingsChart({ reviews, storeFilter }) {
+  const [dayRange, setDayRange] = useState(30);
+  const filtered = storeFilter ? reviews.filter(r=>r.storeId===storeFilter) : reviews;
+
+  if (!filtered.length) return (
+    <div style={{textAlign:"center",color:"rgba(255,255,255,0.25)",fontSize:"13px",padding:"2rem"}}>
+      No data yet — reviews will appear here once customers start scanning
+    </div>
+  );
+
+  const now = new Date();
+  const days = Array.from({length:dayRange}, (_,i) => {
+    const d = new Date(now);
+    d.setDate(d.getDate() - (dayRange - 1 - i));
+    return d.toISOString().slice(0,10);
+  });
+
+  const byDay = {};
+  filtered.forEach(r => {
+    const day = r.timestamp ? r.timestamp.slice(0,10) : null;
+    if (!day) return;
+    if (!byDay[day]) byDay[day] = [];
+    byDay[day].push(r.rating);
+  });
+
+  const points = days.map(day => ({
+    day,
+    avg: byDay[day] ? byDay[day].reduce((a,b)=>a+b,0)/byDay[day].length : null,
+    count: byDay[day] ? byDay[day].length : 0,
+  }));
+
+  const hasAny = points.some(p => p.avg !== null);
+  if (!hasAny) return (
+    <div style={{textAlign:"center",color:"rgba(255,255,255,0.25)",fontSize:"13px",padding:"2rem"}}>
+      No data in the last {dayRange} days
+    </div>
+  );
+
+  const W=600, H=180, PAD={top:20,right:28,bottom:40,left:42};
+  const iW=W-PAD.left-PAD.right;
+  const iH=H-PAD.top-PAD.bottom;
+  const xScale = i => PAD.left + (i/(days.length-1))*iW;
+  const yScale = v => PAD.top + iH - ((v-1)/4)*iH;
+
+  const linePoints = points.map((p,i) => p.avg!==null ? {x:xScale(i),y:yScale(p.avg),...p} : null).filter(Boolean);
+  const pathD = linePoints.map((p,i)=>`${i===0?"M":"L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+  const areaD = linePoints.length>1
+    ? pathD+` L${linePoints[linePoints.length-1].x},${yScale(1)} L${linePoints[0].x},${yScale(1)} Z`
+    : "";
+
+  const rC = v => {
+    if(v>=4.5) return "#27AE60";
+    if(v>=3.5) return "#5CB85C";
+    if(v>=2.5) return "#F0B429";
+    if(v>=1.5) return "#E8762A";
+    return "#E24B4A";
+  };
+
+  const yLabels = [1,2,3,4,5];
+  const step = dayRange===7 ? 1 : 5;
+  const xLabels = points.filter((_,i)=> i%step===0 || i===points.length-1);
+  const [tooltip, setTooltip] = useState(null);
+
+  return (
+    <div style={{overflowX:"auto"}}>
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{display:"block",fontFamily:"'DM Sans',sans-serif"}}>
+        {yLabels.map(v=>(
+          <g key={v}>
+            <line x1={PAD.left} y1={yScale(v)} x2={W-PAD.right} y2={yScale(v)} stroke="rgba(255,255,255,0.06)" strokeWidth="1"/>
+            <text x={PAD.left-8} y={yScale(v)+4} textAnchor="end" fill="rgba(255,255,255,0.3)" fontSize="10">{v}★</text>
+          </g>
+        ))}
+        {areaD && <path d={areaD} fill="rgba(218,41,28,0.08)"/>}
+        {pathD && <path d={pathD} fill="none" stroke="#DA291C" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"/>}
+        {linePoints.map((p,i)=>(
+          <circle key={i} cx={p.x} cy={p.y} r="4" fill={rC(p.avg)} stroke="#0A0A0A" strokeWidth="1.5"
+            style={{cursor:"pointer"}}
+            onMouseEnter={()=>setTooltip(p)}
+            onMouseLeave={()=>setTooltip(null)}
+          />
+        ))}
+        {tooltip && (
+          <g>
+            <rect x={Math.min(tooltip.x-50,W-120)} y={tooltip.y-52} width="110" height="44" rx="6"
+              fill="#1a1a1a" stroke="rgba(255,255,255,0.12)" strokeWidth="1"/>
+            <text x={Math.min(tooltip.x-50,W-120)+55} y={tooltip.y-34} textAnchor="middle" fill="white" fontSize="11" fontWeight="bold">
+              {tooltip.avg.toFixed(1)}★ avg
+            </text>
+            <text x={Math.min(tooltip.x-50,W-120)+55} y={tooltip.y-18} textAnchor="middle" fill="rgba(255,255,255,0.5)" fontSize="10">
+              {tooltip.count} review{tooltip.count!==1?"s":""} · {tooltip.day.slice(5).replace("-","/")}
+            </text>
+          </g>
+        )}
+        <line x1={PAD.left} y1={yScale(2)} x2={W-PAD.right} y2={yScale(2)}
+          stroke="rgba(226,75,74,0.3)" strokeWidth="1" strokeDasharray="4,3"/>
+        <text x={W-PAD.right+4} y={yScale(2)+4} fill="rgba(226,75,74,0.5)" fontSize="9">alert</text>
+        {xLabels.map((p,i)=>{
+          const idx2=points.indexOf(p);
+          return <text key={i} x={xScale(idx2)} y={H-8} textAnchor="middle" fill="rgba(255,255,255,0.3)" fontSize="9">
+            {p.day.slice(5).replace("-","/")}
+          </text>;
+        })}
+      </svg>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:"8px",flexWrap:"wrap",gap:"8px"}}>
+        <div style={{fontSize:"11px",color:"rgba(255,255,255,0.25)"}}>
+          Hover points for detail · Dashed line = alert threshold
+        </div>
+        <div style={{display:"flex",gap:"6px"}}>
+          {[7,30].map(d=>(
+            <button key={d} onClick={()=>setDayRange(d)}
+              style={{background:dayRange===d?"#DA291C":"rgba(255,255,255,0.08)",color:dayRange===d?"white":"rgba(255,255,255,0.5)",border:"none",borderRadius:"6px",padding:"4px 12px",fontSize:"11px",cursor:"pointer",fontFamily:"'DM Sans',sans-serif",transition:"all 0.15s"}}>
+              {d === 7 ? "7 days" : "30 days"}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════
+   STORE EDITOR
+═══════════════════════════════════════════════ */
+function StoreEditor({ store, mgr, onSave, saved }) {
+  const [name,setName]=useState(mgr.name||""); const [email,setEmail]=useState(mgr.email||""); const [pin,setPin]=useState(mgr.pin||"");
+  const [savedValues,setSavedValues]=useState({name:mgr.name||"",email:mgr.email||"",pin:mgr.pin||""});
+  useEffect(()=>{ setName(mgr.name||""); setEmail(mgr.email||""); setPin(mgr.pin||""); setSavedValues({name:mgr.name||"",email:mgr.email||"",pin:mgr.pin||""}); },[mgr.name,mgr.email,mgr.pin]);
+  const handleSave = async () => { await onSave({name,email,pin}); setSavedValues({name,email,pin}); };
+  return (
+    <div style={{marginTop:"1.25rem",paddingTop:"1.25rem",borderTop:"1px solid rgba(255,255,255,0.08)"}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:"12px",marginBottom:"1rem"}}>
+        <div>
+          <div style={{fontSize:"12px",color:"rgba(255,255,255,0.4)",marginBottom:"5px"}}>Manager name</div>
+          <input className="inp" value={name} onChange={e=>setName(e.target.value)} placeholder="Full name"/>
+          {savedValues.name?<div style={{fontSize:"11px",color:"rgba(255,255,255,0.3)",marginTop:"5px"}}>Saved: <span style={{color:"rgba(255,255,255,0.55)"}}>{savedValues.name}</span></div>:<div style={{fontSize:"11px",color:"rgba(255,100,100,0.6)",marginTop:"5px"}}>Not set</div>}
+        </div>
+        <div>
+          <div style={{fontSize:"12px",color:"rgba(255,255,255,0.4)",marginBottom:"5px"}}>Notification email</div>
+          <input className="inp" type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="manager@email.com"/>
+          {savedValues.email?<div style={{fontSize:"11px",color:"rgba(255,255,255,0.3)",marginTop:"5px"}}>Saved: <span style={{color:"#6fcf97"}}>{savedValues.email}</span></div>:<div style={{fontSize:"11px",color:"rgba(255,100,100,0.6)",marginTop:"5px"}}>Not set — alerts go to fallback email</div>}
+        </div>
+        <div>
+          <div style={{fontSize:"12px",color:"rgba(255,255,255,0.4)",marginBottom:"5px"}}>Manager login PIN</div>
+          <input className="inp" value={pin} onChange={e=>setPin(e.target.value)} placeholder="e.g. 5521" maxLength={8}/>
+          {savedValues.pin?<div style={{fontSize:"11px",color:"rgba(255,255,255,0.3)",marginTop:"5px"}}>Saved: <span style={{color:"rgba(255,255,255,0.55)"}}>{"•".repeat(savedValues.pin.length)} ({savedValues.pin.length} digits)</span></div>:<div style={{fontSize:"11px",color:"rgba(255,100,100,0.6)",marginTop:"5px"}}>Not set — manager can't log in</div>}
+        </div>
+      </div>
+      <button className="red-btn" onClick={handleSave}>{saved?"✓ Saved!":"Save "+store.name}</button>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════
+   EMAIL CONFIG PANEL
+═══════════════════════════════════════════════ */
+function EmailConfigPanel() {
+  const saved=getEJConfig();
+  const [serviceId,setServiceId]=useState(saved.serviceId||""); const [templateId,setTemplateId]=useState(saved.templateId||"");
+  const [publicKey,setPublicKey]=useState(saved.publicKey||""); const [notifyEmail,setNotifyEmail]=useState(saved.notifyEmail||"");
+  const [savedOk,setSavedOk]=useState(false); const [testing,setTesting]=useState(false); const [testResult,setTestResult]=useState(null);
+  const handleSave=()=>{ saveEJConfig({serviceId:serviceId.trim(),templateId:templateId.trim(),publicKey:publicKey.trim(),notifyEmail:notifyEmail.trim()}); setSavedOk(true); setTimeout(()=>setSavedOk(false),2000); };
+  const handleTest=async()=>{ setTesting(true); setTestResult(null); const res=await sendEmail({storeName:"Bourke Street, VIC (TEST)",storeAddress:"205 Bourke St, Melbourne VIC 3000",rating:2,ratingLabel:"Poor",tags:["🧹 Dirty floors","🧴 No soap"],comment:"Test alert from CleanCheck dev portal.",isAlert:true,toEmail:notifyEmail}); setTesting(false); setTestResult(res); };
+  return (
+    <div style={{maxWidth:"600px"}}>
+      <div style={{fontSize:"13px",color:"rgba(255,255,255,0.4)",marginBottom:"1.5rem"}}>EmailJS credentials for sending review notifications.</div>
+      <div className="dk-card" style={{padding:"1.5rem",marginBottom:"1rem"}}>
+        <div style={{fontSize:"14px",fontWeight:500,color:"white",marginBottom:"1.25rem"}}>EmailJS credentials</div>
+        <div style={{display:"flex",flexDirection:"column",gap:"12px",marginBottom:"1.25rem"}}>
+          {[{label:"Fallback notify email",val:notifyEmail,set:setNotifyEmail,ph:"your@email.com"},{label:"Public Key",val:publicKey,set:setPublicKey,ph:"e.g. AbCdEfGhIjKlMnOp"},{label:"Service ID",val:serviceId,set:setServiceId,ph:"e.g. service_abc123"},{label:"Template ID",val:templateId,set:setTemplateId,ph:"e.g. template_xyz789"}].map(({label,val,set,ph})=>(
+            <div key={label}><div style={{fontSize:"12px",color:"rgba(255,255,255,0.4)",marginBottom:"5px"}}>{label}</div><input value={val} onChange={e=>set(e.target.value)} placeholder={ph} style={{width:"100%",background:"#1a1a1a",border:"1px solid rgba(255,255,255,0.12)",borderRadius:"8px",padding:"10px 12px",color:"white",fontSize:"13px",outline:"none"}}/></div>
+          ))}
+        </div>
+        <button onClick={handleSave} style={{background:"#DA291C",color:"white",border:"none",borderRadius:"8px",padding:"10px 20px",fontSize:"14px",fontWeight:500,cursor:"pointer",marginBottom:"1.25rem"}}>{savedOk?"✓ Saved!":"Save credentials"}</button>
+        <div style={{borderTop:"1px solid rgba(255,255,255,0.08)",paddingTop:"1.25rem"}}>
+          <div style={{fontSize:"13px",color:"rgba(255,255,255,0.5)",marginBottom:"10px"}}>Send a test alert to <span style={{color:"white"}}>{notifyEmail}</span></div>
+          <button onClick={handleTest} disabled={testing} style={{background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.12)",color:"white",borderRadius:"8px",padding:"9px 20px",fontSize:"13px",cursor:"pointer"}}>{testing?"Sending…":"Send test alert"}</button>
+          {testResult&&<div style={{marginTop:"10px",fontSize:"13px",padding:"10px 12px",borderRadius:"8px",background:testResult.ok?"rgba(39,174,96,0.1)":"rgba(226,75,74,0.1)",color:testResult.ok?"#6fcf97":"#ff8585",border:`1px solid ${testResult.ok?"rgba(39,174,96,0.3)":"rgba(226,75,74,0.3)"}`}}>{testResult.ok?"✓ Test email sent!":"✗ Failed: "+testResult.error}</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════
+   MANAGER PORTAL
+═══════════════════════════════════════════════ */
+function ManagerPortal({ storeId, onLogout }) {
+  const store=getStore(storeId);
+  const [reviews,setReviews]=useState([]); const [name,setName]=useState(""); const [email,setEmail]=useState("");
+  const [saved,setSaved]=useState(false); const [lastCleaned,setLastCleaned]=useState(null); const [logging,setLogging]=useState(false);
+  const [activeTab,setActiveTab]=useState("overview"); const [loading,setLoading]=useState(true);
+
+  useEffect(()=>{
+    const load=async()=>{ setLoading(true); const [r,mgr]=await Promise.all([getReviews(storeId),getStoreManager(storeId)]); setReviews(r); setName(mgr.name||""); setEmail(mgr.email||""); setLastCleaned(mgr.last_cleaned_at||null); setLoading(false); };
+    load();
+  },[storeId]);
+
+  const handleLogClean=async()=>{ setLogging(true); const ts=await logCleaned(storeId); if(ts) setLastCleaned(ts); setLogging(false); };
+  const formatCleaned=(ts)=>{ if(!ts) return null; const d=new Date(ts),now=new Date(),diffM=Math.floor((now-d)/60000); if(diffM<1) return "just now"; if(diffM<60) return diffM+"m ago"; if(diffM<1440) return Math.floor(diffM/60)+"h ago"; return d.toLocaleDateString("en-AU",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}); };
+  const handleSave=async()=>{ const mgr=await getStoreManager(storeId); await saveStoreManager(storeId,{...mgr,name,email}); setSaved(true); setTimeout(()=>setSaved(false),2000); };
+
+  const storeAvg=avg(reviews.map(r=>r.rating));
+  const alertCount=reviews.filter(r=>r.rating<=2).length;
+
+  const trendData=Array.from({length:14},(_,i)=>{ const d=new Date(Date.now()-(13-i)*86400000); const dayRevs=reviews.filter(r=>new Date(r.timestamp).toDateString()===d.toDateString()); return {label:d.toLocaleDateString("en-AU",{day:"numeric",month:"short"}),avg:dayRevs.length?avg(dayRevs.map(r=>r.rating)):null,count:dayRevs.length}; });
+  const hourData=(()=>{ const hours=Array.from({length:24},(_,i)=>({hour:i,count:0,alerts:0})); reviews.forEach(r=>{ const h=new Date(r.timestamp).getHours(); hours[h].count++; if(r.rating<=2) hours[h].alerts++; }); const blocks=[{label:"12am–6am",hours:[0,1,2,3,4,5]},{label:"6am–9am",hours:[6,7,8]},{label:"9am–12pm",hours:[9,10,11]},{label:"12pm–3pm",hours:[12,13,14]},{label:"3pm–6pm",hours:[15,16,17]},{label:"6pm–9pm",hours:[18,19,20]},{label:"9pm–12am",hours:[21,22,23]}]; return blocks.map(b=>({label:b.label,count:b.hours.reduce((s,h)=>s+hours[h].count,0),alerts:b.hours.reduce((s,h)=>s+hours[h].alerts,0)})); })();
+  const tagCounts=(()=>{ const counts={}; reviews.forEach(r=>{ (r.tags||[]).forEach(t=>{ const tag=ISSUE_TAGS.find(x=>`${x.icon} ${x.label}`===t||x.id===t); if(tag&&tag.neg) counts[t]=(counts[t]||0)+1; }); }); return Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,5); })();
+  const maxHour=Math.max(...hourData.map(h=>h.count),1);
+
+  const TrendChart=()=>{ const w=500,h=120,pad={top:10,right:10,bottom:30,left:28},iw=w-pad.left-pad.right,ih=h-pad.top-pad.bottom; const pts=trendData.map((d,i)=>({x:pad.left+(i/(trendData.length-1))*iw,y:d.avg!=null?pad.top+ih-((d.avg-1)/4)*ih:null,...d})); const lp=pts.filter(p=>p.y!=null); const pd=lp.map((p,i)=>`${i===0?"M":"L"}${p.x},${p.y}`).join(" "); const ad=lp.length>1?`${pd} L${lp[lp.length-1].x},${pad.top+ih} L${lp[0].x},${pad.top+ih} Z`:""; return <svg viewBox={`0 0 ${w} ${h}`} style={{width:"100%",height:"auto"}}>{[1,2,3,4,5].map(v=><g key={v}><line x1={pad.left} x2={pad.left+iw} y1={pad.top+ih-((v-1)/4)*ih} y2={pad.top+ih-((v-1)/4)*ih} stroke="rgba(255,255,255,0.06)" strokeWidth="1"/><text x={pad.left-4} y={pad.top+ih-((v-1)/4)*ih+4} fill="rgba(255,255,255,0.3)" fontSize="9" textAnchor="end">{v}★</text></g>)}{ad&&<path d={ad} fill="rgba(218,41,28,0.12)"/>}{lp.length>1&&<path d={pd} fill="none" stroke="#DA291C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>}{pts.map((p,i)=>p.y!=null?<circle key={i} cx={p.x} cy={p.y} r="3" fill="#DA291C"/>:null)}{trendData.filter((_,i)=>i%2===0).map((d,_i)=>{ const idx=trendData.indexOf(d); return <text key={idx} x={pad.left+(idx/(trendData.length-1))*iw} y={h-4} fill="rgba(255,255,255,0.25)" fontSize="8" textAnchor="middle">{d.label}</text>; })}</svg>; };
+  const HourChart=()=>{ const w=500,h=120,pad={top:10,right:10,bottom:30,left:10},iw=w-pad.left-pad.right,ih=h-pad.top-pad.bottom,bw=iw/hourData.length-4; return <svg viewBox={`0 0 ${w} ${h}`} style={{width:"100%",height:"auto"}}>{hourData.map((d,i)=>{ const x=pad.left+i*(iw/hourData.length),bh=maxHour>0?(d.count/maxHour)*ih:0,abh=maxHour>0?(d.alerts/maxHour)*ih:0; return <g key={i}><rect x={x+2} y={pad.top+ih-bh} width={bw} height={bh} fill="rgba(218,41,28,0.25)" rx="2"/>{d.alerts>0&&<rect x={x+2} y={pad.top+ih-abh} width={bw} height={abh} fill="#DA291C" rx="2"/>}<text x={x+2+bw/2} y={h-4} fill="rgba(255,255,255,0.3)" fontSize="7" textAnchor="middle">{d.label}</text></g>; })}</svg>; };
+
+  return (
+    <div style={{minHeight:"100vh",background:"#0A0A0A",color:"white"}}>
+      <style>{`.dk-card{background:#141414;border:1px solid rgba(255,255,255,0.08);border-radius:14px;} .ghost-btn{background:transparent;border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.6);border-radius:8px;padding:7px 14px;font-size:13px;cursor:pointer;} .ghost-btn:hover{background:rgba(255,255,255,0.07);color:white;} .inp{width:100%;background:#1a1a1a;border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:10px 12px;color:white;font-size:14px;outline:none;} .inp:focus{border-color:#DA291C;} .mtab{background:transparent;border:none;color:rgba(255,255,255,0.4);font-size:14px;font-family:'DM Sans',sans-serif;cursor:pointer;padding:8px 0;border-bottom:2px solid transparent;transition:all 0.15s;margin-right:20px;} .mtab.active{color:white;border-bottom-color:#DA291C;}`}</style>
+      <div style={{maxWidth:"960px",margin:"0 auto",padding:"1.5rem"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"1.5rem",flexWrap:"wrap",gap:"12px"}}>
+          <div><div style={{fontFamily:"'Syne',sans-serif",fontSize:"22px",fontWeight:800}}>clean<span style={{color:"#DA291C"}}>check</span></div><div style={{fontSize:"13px",color:"rgba(255,255,255,0.4)",marginTop:"2px"}}>McDonald's {store.name}, {store.state}</div></div>
+          <button className="ghost-btn" onClick={onLogout}>Log out</button>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:"12px",marginBottom:"1.5rem"}}>
+          {[{label:"Avg rating",val:reviews.length?storeAvg.toFixed(1):"—",col:reviews.length?ratingColor(storeAvg):"white"},{label:"Total reviews",val:reviews.length,col:"white"},{label:"Alerts (≤2★)",val:alertCount,col:alertCount>0?"#E24B4A":"#27AE60"},{label:"This week",val:reviews.filter(r=>(Date.now()-new Date(r.timestamp))<604800000).length,col:"white"},{label:"Last review",val:reviews.length?timeAgo(reviews[0].timestamp):"None yet",col:reviews.length?"white":"rgba(255,255,255,0.3)"}].map(({label,val,col})=>(
+            <div key={label} className="dk-card" style={{padding:"1.25rem"}}><div style={{fontSize:"11px",color:"rgba(255,255,255,0.3)",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:"0.4rem"}}>{label}</div><div style={{fontFamily:"'Syne',sans-serif",fontSize:"32px",fontWeight:800,color:col,lineHeight:1}}>{val}</div></div>
+          ))}
+          <div className="dk-card" style={{padding:"1.25rem",display:"flex",flexDirection:"column",justifyContent:"space-between",gap:"10px"}}>
+            <div><div style={{fontSize:"11px",color:"rgba(255,255,255,0.3)",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:"6px"}}>Last cleaned</div><div style={{fontFamily:"'Syne',sans-serif",fontSize:"20px",fontWeight:800,color:lastCleaned?"#6fcf97":"#F0B429",lineHeight:1}}>{lastCleaned?formatCleaned(lastCleaned):"Not logged"}</div></div>
+            <button onClick={handleLogClean} disabled={logging} style={{background:"#DA291C",color:"white",border:"none",borderRadius:"7px",padding:"8px 12px",fontSize:"12px",fontWeight:500,cursor:"pointer",opacity:logging?0.6:1,width:"100%"}}>{logging?"Logging…":"✓ Log clean now"}</button>
+          </div>
+        </div>
+        <div style={{borderBottom:"1px solid rgba(255,255,255,0.08)",marginBottom:"1.5rem",overflowX:"auto",whiteSpace:"nowrap"}}>
+          {[["overview","Overview"],["analytics","Analytics"],["reviews","Reviews"],["settings","Settings"]].map(([id,label])=>(
+            <button key={id} className={"mtab"+(activeTab===id?" active":"")} onClick={()=>setActiveTab(id)}>{label}</button>
+          ))}
+        </div>
+        {activeTab==="overview" && (
+          <div>
+            <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr)",gap:"1rem",marginBottom:"1rem"}} className="mgr-grid">
+              <div className="dk-card" style={{padding:"1.25rem"}}><div style={{fontSize:"13px",fontWeight:500,marginBottom:"1rem"}}>Rating trend — last 14 days</div>{loading?<div style={{color:"rgba(255,255,255,0.3)",fontSize:"13px"}}>Loading…</div>:reviews.length===0?<div style={{color:"rgba(255,255,255,0.25)",fontSize:"13px",padding:"2rem 0",textAlign:"center"}}>No reviews yet</div>:<TrendChart/>}</div>
+              <div className="dk-card" style={{padding:"1.5rem",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:"1rem"}}><div style={{fontSize:"13px",fontWeight:500,color:"rgba(255,255,255,0.6)"}}>Your QR code</div><QRCard store={store} size={150}/></div>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"1rem"}}>
+              <div className="dk-card" style={{padding:"1.25rem"}}><div style={{fontSize:"13px",fontWeight:500,marginBottom:"1rem"}}>Busiest complaint times</div>{reviews.length===0?<div style={{color:"rgba(255,255,255,0.25)",fontSize:"13px",padding:"1rem 0",textAlign:"center"}}>No data yet</div>:<><HourChart/><div style={{display:"flex",gap:"16px",marginTop:"8px"}}><div style={{display:"flex",alignItems:"center",gap:"6px",fontSize:"11px",color:"rgba(255,255,255,0.4)"}}><div style={{width:10,height:10,background:"rgba(218,41,28,0.25)",borderRadius:2}}></div>All reviews</div><div style={{display:"flex",alignItems:"center",gap:"6px",fontSize:"11px",color:"rgba(255,255,255,0.4)"}}><div style={{width:10,height:10,background:"#DA291C",borderRadius:2}}></div>Alerts only</div></div></>}</div>
+              <div className="dk-card" style={{padding:"1.25rem"}}><div style={{fontSize:"13px",fontWeight:500,marginBottom:"1rem"}}>Top issues reported</div>{tagCounts.length===0?<div style={{color:"rgba(255,255,255,0.25)",fontSize:"13px",padding:"1rem 0",textAlign:"center"}}>No issues yet</div>:tagCounts.map(([tag,count],i)=>{ const pct=Math.round((count/reviews.length)*100); return <div key={i} style={{marginBottom:"10px"}}><div style={{display:"flex",justifyContent:"space-between",fontSize:"12px",marginBottom:"4px"}}><span style={{color:"rgba(255,255,255,0.7)"}}>{tag}</span><span style={{color:"rgba(255,255,255,0.4)"}}>{count}x ({pct}%)</span></div><div style={{background:"rgba(255,255,255,0.08)",borderRadius:"999px",height:4,overflow:"hidden"}}><div style={{height:"100%",width:pct+"%",background:"#DA291C",borderRadius:"999px"}}></div></div></div>; })}</div>
+            </div>
+          </div>
+        )}
+        {activeTab==="analytics" && (
+          <div style={{display:"flex",flexDirection:"column",gap:"1rem"}}>
+            <div className="dk-card" style={{padding:"1.25rem"}}><div style={{fontSize:"13px",fontWeight:500,marginBottom:"4px"}}>Rating trend — last 14 days</div><div style={{fontSize:"11px",color:"rgba(255,255,255,0.3)",marginBottom:"1rem"}}>Average rating per day</div>{reviews.length===0?<div style={{color:"rgba(255,255,255,0.25)",fontSize:"13px",padding:"2rem 0",textAlign:"center"}}>No reviews yet</div>:<TrendChart/>}</div>
+            <div className="dk-card" style={{padding:"1.25rem"}}><div style={{fontSize:"13px",fontWeight:500,marginBottom:"4px"}}>Busiest complaint times</div><div style={{fontSize:"11px",color:"rgba(255,255,255,0.3)",marginBottom:"1rem"}}>When low-rating reviews are most common</div>{reviews.length===0?<div style={{color:"rgba(255,255,255,0.25)",fontSize:"13px",padding:"2rem 0",textAlign:"center"}}>No data yet</div>:<><HourChart/><div style={{display:"flex",gap:"16px",marginTop:"10px"}}><div style={{display:"flex",alignItems:"center",gap:"6px",fontSize:"11px",color:"rgba(255,255,255,0.4)"}}><div style={{width:10,height:10,background:"rgba(218,41,28,0.25)",borderRadius:2}}></div>All reviews</div><div style={{display:"flex",alignItems:"center",gap:"6px",fontSize:"11px",color:"rgba(255,255,255,0.4)"}}><div style={{width:10,height:10,background:"#DA291C",borderRadius:2}}></div>Urgent alerts only</div></div></>}</div>
+            <div className="dk-card" style={{padding:"1.25rem"}}><div style={{fontSize:"13px",fontWeight:500,marginBottom:"4px"}}>Top issues reported</div><div style={{fontSize:"11px",color:"rgba(255,255,255,0.3)",marginBottom:"1rem"}}>Most common problems flagged</div>{tagCounts.length===0?<div style={{color:"rgba(255,255,255,0.25)",fontSize:"13px",padding:"1rem 0",textAlign:"center"}}>No issues reported yet</div>:tagCounts.map(([tag,count],i)=>{ const pct=Math.round((count/reviews.length)*100); return <div key={i} style={{marginBottom:"12px"}}><div style={{display:"flex",justifyContent:"space-between",fontSize:"13px",marginBottom:"5px"}}><span style={{color:"rgba(255,255,255,0.7)"}}>{tag}</span><span style={{color:"rgba(255,255,255,0.4)"}}>{count} reports ({pct}%)</span></div><div style={{background:"rgba(255,255,255,0.08)",borderRadius:"999px",height:5,overflow:"hidden"}}><div style={{height:"100%",width:pct+"%",background:"#DA291C",borderRadius:"999px",transition:"width 0.5s"}}></div></div></div>; })}</div>
+          </div>
+        )}
+        <div style={{display:activeTab==="reviews"?"block":"none"}}>
+          <div className="dk-card">
+            <div style={{padding:"1rem 1.25rem",borderBottom:"1px solid rgba(255,255,255,0.06)",fontSize:"13px",fontWeight:500}}>All reviews — {store.name}</div>
+            <div style={{maxHeight:"520px",overflowY:"auto"}}>
+              {loading && <div style={{padding:"2rem",textAlign:"center",color:"rgba(255,255,255,0.3)",fontSize:"14px"}}>Loading…</div>}
+              {!loading&&reviews.length===0 && <div style={{padding:"2rem",textAlign:"center",color:"rgba(255,255,255,0.25)",fontSize:"14px"}}>No reviews yet — share your QR code!</div>}
+              {reviews.map(r=><ReviewRow key={r.id} r={r} showStore={false} onResolve={id=>setReviews(prev=>prev.map(x=>x.id===id?{...x,resolved:true}:x))}/>)}
+            </div>
+          </div>
+        </div>
+        <div style={{display:activeTab==="settings"?"block":"none"}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 260px",gap:"1rem"}}>
+            <div className="dk-card" style={{padding:"1.5rem"}}>
+              <div style={{fontSize:"14px",fontWeight:500,marginBottom:"1.25rem",color:"white"}}>Your details</div>
+              <div style={{marginBottom:"1rem"}}><div style={{fontSize:"12px",color:"rgba(255,255,255,0.4)",marginBottom:"6px"}}>Manager name</div><input className="inp" value={name} onChange={e=>setName(e.target.value)} placeholder="Your full name"/></div>
+              <div style={{marginBottom:"1.25rem"}}><div style={{fontSize:"12px",color:"rgba(255,255,255,0.4)",marginBottom:"6px"}}>Notification email</div><input className="inp" type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="your@email.com.au"/><div style={{fontSize:"11px",color:"rgba(255,255,255,0.25)",marginTop:"5px"}}>Review alerts for {store.name} will be sent here.</div></div>
+              <button onClick={handleSave} style={{background:"#DA291C",color:"white",border:"none",borderRadius:"8px",padding:"10px 20px",fontSize:"14px",fontWeight:500,cursor:"pointer"}}>{saved?"✓ Saved!":"Save details"}</button>
+            </div>
+            <div className="dk-card" style={{padding:"1.5rem",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:"1rem"}}>
+              <div style={{fontSize:"13px",fontWeight:500,color:"rgba(255,255,255,0.6)"}}>Your bathroom QR code</div>
+              <QRCard store={store} size={150}/>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════
+   ADMIN PORTAL
+═══════════════════════════════════════════════ */
+function AdminPortal({ onLogout }) {
+  const [reviews,setReviews]=useState([]); const [mgmtData,setMgmtData]=useState({}); const [editStore,setEditStore]=useState(null);
+  const [activeTab,setActiveTab]=useState("overview"); const [saved,setSaved]=useState(null);
+  const [adminLoading,setAdminLoading]=useState(true); const [chartStore,setChartStore]=useState("");
+
+  useEffect(()=>{
+    const load=async()=>{ setAdminLoading(true); const [r,m]=await Promise.all([getReviews(),getManagerData()]); setReviews(r); setMgmtData(m); setAdminLoading(false); };
+    load();
+  },[]);
+
+  const storeStats=STORES.map(s=>{ const revs=reviews.filter(r=>r.storeId===s.id); const mgr=mgmtData[s.id]||{}; return {...s,average:avg(revs.map(r=>r.rating)),count:revs.length,mgr}; });
+  const handleSaveManager=async(storeId,data)=>{ await saveStoreManager(storeId,data); const m=await getManagerData(); setMgmtData(m); setSaved(storeId); setTimeout(()=>setSaved(null),2000); };
+  const overallAvg=avg(reviews.map(r=>r.rating)); const alertCount=reviews.filter(r=>r.rating<=2).length; const configured=STORES.filter(s=>mgmtData[s.id]?.email).length;
+
+  return (
+    <div style={{minHeight:"100vh",background:"#0A0A0A",color:"white"}}>
+      <style>{`.dk-card{background:#141414;border:1px solid rgba(255,255,255,0.08);border-radius:14px;} .ghost-btn{background:transparent;border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.6);border-radius:8px;padding:7px 14px;font-size:13px;cursor:pointer;} .ghost-btn:hover{background:rgba(255,255,255,0.07);color:white;} .inp{width:100%;background:#1a1a1a;border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:9px 12px;color:white;font-size:13px;outline:none;} .inp:focus{border-color:#DA291C;} .tab-btn{background:transparent;border:none;color:rgba(255,255,255,0.4);font-size:14px;font-family:'DM Sans',sans-serif;cursor:pointer;padding:8px 0;border-bottom:2px solid transparent;transition:all 0.15s;margin-right:24px;white-space:nowrap;} .tab-btn.active{color:white;border-bottom-color:#DA291C;} .store-card{background:#141414;border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:1.25rem;margin-bottom:1rem;} .red-btn{background:#DA291C;color:white;border:none;border-radius:8px;padding:9px 18px;font-size:13px;font-weight:500;cursor:pointer;}`}</style>
+      <div style={{maxWidth:"1100px",margin:"0 auto",padding:"1.5rem"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"1.5rem",flexWrap:"wrap",gap:"12px"}}>
+          <div><div style={{fontFamily:"'Syne',sans-serif",fontSize:"22px",fontWeight:800}}>clean<span style={{color:"#DA291C"}}>check</span> <span style={{fontSize:"14px",fontWeight:400,color:"rgba(255,255,255,0.4)"}}>dev</span></div><div style={{fontSize:"12px",color:"rgba(255,255,255,0.3)"}}>Developer portal · All locations</div></div>
+          <button className="ghost-btn" onClick={onLogout}>Log out</button>
+        </div>
+        <div style={{borderBottom:"1px solid rgba(255,255,255,0.08)",marginBottom:"1.5rem",overflowX:"auto",whiteSpace:"nowrap"}}>
+          {["overview","stores","qr-codes","email-config"].map(t=>(
+            <button key={t} className={"tab-btn"+(activeTab===t?" active":"")} onClick={()=>setActiveTab(t)}>
+              {t==="overview"?"Overview":t==="stores"?"Manage Stores":t==="qr-codes"?"QR Codes":"Email Config"}
+            </button>
+          ))}
+        </div>
+        {activeTab==="overview" && (
+          <div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:"12px",marginBottom:"1.5rem"}}>
+              {[{label:"Avg rating",val:overallAvg.toFixed(1),col:ratingColor(overallAvg)},{label:"Total reviews",val:reviews.length,col:"white"},{label:"Alerts (≤2★)",val:alertCount,col:alertCount>0?"#E24B4A":"#27AE60"},{label:"Stores configured",val:configured+"/"+STORES.length,col:configured===STORES.length?"#27AE60":"#F0B429"}].map(({label,val,col})=>(
+                <div key={label} className="dk-card" style={{padding:"1.25rem"}}><div style={{fontSize:"11px",color:"rgba(255,255,255,0.3)",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:"0.4rem"}}>{label}</div><div style={{fontFamily:"'Syne',sans-serif",fontSize:"32px",fontWeight:800,color:col,lineHeight:1}}>{val}</div></div>
+              ))}
+            </div>
+            <div className="dk-card" style={{overflow:"hidden",marginBottom:"1rem"}}>
+              <div style={{padding:"1rem 1.25rem",borderBottom:"1px solid rgba(255,255,255,0.06)",fontSize:"13px",fontWeight:500}}>All stores at a glance</div>
+              {storeStats.map(s=>(
+                <div key={s.id} style={{display:"flex",alignItems:"center",padding:"12px 1.25rem",borderBottom:"1px solid rgba(255,255,255,0.05)",gap:"12px",flexWrap:"wrap"}}>
+                  <div style={{flex:1,minWidth:"140px"}}><div style={{fontSize:"13px",fontWeight:500}}>{s.name}, {s.state}</div><div style={{fontSize:"11px",color:"rgba(255,255,255,0.35)",marginTop:"2px"}}>{s.mgr.email?"📧 "+s.mgr.email:"⚠ No email set"}</div></div>
+                  <div style={{display:"flex",alignItems:"center",gap:"8px",minWidth:"120px"}}><div style={{flex:1,background:"rgba(255,255,255,0.08)",borderRadius:"999px",height:4,overflow:"hidden"}}><div style={{height:"100%",width:((s.average/5)*100)+"%",background:ratingColor(s.average),borderRadius:"999px"}}></div></div><div style={{fontSize:"13px",fontWeight:500,color:ratingColor(s.average),minWidth:"28px"}}>{s.count?s.average.toFixed(1):"—"}</div></div>
+                  <div style={{fontSize:"12px",color:"rgba(255,255,255,0.3)",minWidth:"70px",textAlign:"right"}}>{s.count} reviews</div>
+                </div>
+              ))}
+            </div>
+            <div className="dk-card" style={{padding:"1.25rem"}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"1.25rem",flexWrap:"wrap",gap:"8px"}}>
+                <div style={{fontSize:"13px",fontWeight:500}}>Ratings over time</div>
+                <select value={chartStore} onChange={e=>setChartStore(e.target.value)} style={{background:"#1a1a1a",border:"1px solid rgba(255,255,255,0.12)",borderRadius:"7px",color:"rgba(255,255,255,0.7)",padding:"6px 12px",fontSize:"12px",outline:"none",cursor:"pointer"}}>
+                  <option value="">All stores</option>
+                  {STORES.map(s=><option key={s.id} value={s.id}>{s.name}, {s.state}</option>)}
+                </select>
+              </div>
+              <RatingsChart reviews={reviews} storeFilter={chartStore||null}/>
+            </div>
+          </div>
+        )}
+        {activeTab==="stores" && (
+          <div>
+            <div style={{fontSize:"13px",color:"rgba(255,255,255,0.4)",marginBottom:"1.25rem"}}>Set each store manager name, email, and login PIN.</div>
+            {adminLoading
+              ? <div style={{padding:"2rem",textAlign:"center",color:"rgba(255,255,255,0.3)",fontSize:"14px"}}>Loading store data…</div>
+              : STORES.map(s=>{ const mgr=mgmtData[s.id]||{name:"",email:"",pin:""}; const revs=reviews.filter(r=>r.storeId===s.id); const isOpen=editStore===s.id; return (
+                  <div key={s.id} className="store-card">
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer"}} onClick={()=>setEditStore(isOpen?null:s.id)}>
+                      <div><div style={{fontSize:"14px",fontWeight:500}}>{s.name}, {s.state}</div><div style={{fontSize:"12px",color:"rgba(255,255,255,0.35)",marginTop:"2px"}}>{mgr.email?<span style={{color:"#6fcf97"}}>✓ {mgr.email}</span>:<span style={{color:"#ff8585"}}>⚠ No email configured</span>}{mgr.pin&&<span style={{color:"rgba(255,255,255,0.3)",marginLeft:"10px"}}>PIN set ✓</span>}</div></div>
+                      <div style={{display:"flex",alignItems:"center",gap:"12px"}}><div style={{fontSize:"12px",color:"rgba(255,255,255,0.3)"}}>{revs.length} reviews · {revs.length?avg(revs.map(r=>r.rating)).toFixed(1)+"★":"—"}</div><div style={{color:"rgba(255,255,255,0.4)",fontSize:"18px"}}>{isOpen?"▲":"▼"}</div></div>
+                    </div>
+                    {isOpen&&<StoreEditor key={s.id+JSON.stringify(mgr)} store={s} mgr={mgr} onSave={d=>handleSaveManager(s.id,d)} saved={saved===s.id}/>}
+                  </div>
+                ); })
+            }
+          </div>
+        )}
+        {activeTab==="qr-codes" && (
+          <div>
+            <div style={{fontSize:"13px",color:"rgba(255,255,255,0.4)",marginBottom:"1.25rem"}}>Print-ready QR codes for every location.</div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:"1rem"}}>
+              {STORES.map(s=>(
+                <div key={s.id} className="dk-card" style={{padding:"1.5rem",display:"flex",flexDirection:"column",alignItems:"center",gap:"12px"}}>
+                  <div style={{textAlign:"center"}}><div style={{fontSize:"14px",fontWeight:500}}>{s.name}</div><div style={{fontSize:"12px",color:"rgba(255,255,255,0.35)"}}>{s.city}, {s.state}</div></div>
+                  <QRCard store={s} size={150}/>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {activeTab==="email-config" && <EmailConfigPanel/>}
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════
+   REVIEW PAGE
+═══════════════════════════════════════════════ */
+function ReviewPage({ storeId }) {
+  const store=getStore(storeId);
+  const [rating,setRating]=useState(0); const [hover,setHover]=useState(0); const [tags,setTags]=useState([]);
+  const [comment,setComment]=useState(""); const [submitted,setSubmitted]=useState(false); const [submitting,setSubmitting]=useState(false); const [emailSent,setEmailSent]=useState(null);
+  const toggleTag=id=>setTags(t=>t.includes(id)?t.filter(x=>x!==id):[...t,id]);
+  const active=hover||rating;
+  const handleSubmit=async()=>{
+    if(!rating) return; setSubmitting(true);
+    const tagLabels=ISSUE_TAGS.filter(t=>tags.includes(t.id)).map(t=>`${t.icon} ${t.label}`);
+    const isAlert=rating<=2;
+    await saveReview({storeId:store.id,rating,tags:tagLabels,comment,isAlert});
+    const mgr=await getStoreManager(storeId);
+    const toEmail=(mgr.email&&mgr.email.trim())||getEJConfig().notifyEmail;
+    console.log("CleanCheck routing — mgr:", mgr, "toEmail:", toEmail, "cfg.notifyEmail:", getEJConfig().notifyEmail);
+    const res=await sendEmail({storeName:`${store.name}, ${store.state}`,storeAddress:store.address,rating,ratingLabel:STAR_LABELS[rating],tags:tagLabels,comment,isAlert,toEmail});
+    setEmailSent(res.ok); setSubmitting(false); setSubmitted(true);
+  };
+  if (submitted) return (
+    <div style={{minHeight:"100vh",background:"#f5f5f3",display:"flex",alignItems:"center",justifyContent:"center",padding:"2rem"}}>
+      <div style={{textAlign:"center",maxWidth:"360px",animation:"fadeUp 0.5s ease both"}}>
+        <div style={{width:80,height:80,background:"#e8f8ef",borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 1.5rem",fontSize:"36px"}}>✅</div>
+        <h1 style={{fontFamily:"'Syne',sans-serif",fontSize:"28px",fontWeight:800,color:"#0A0A0A",marginBottom:"0.75rem"}}>Thanks!</h1>
+        <p style={{color:"#666",fontSize:"15px",lineHeight:1.7,marginBottom:"1.5rem"}}>Your review has been received{emailSent===true&&<> and the {store.name} team has been notified.</>}{emailSent===false&&<>. <em style={{color:"#E8762A"}}>Note: email alert couldn't send.</em></>}</p>
+        {rating<=2&&emailSent===true&&<div style={{background:"#fff5f5",border:"1px solid #fca5a5",borderRadius:"10px",padding:"12px 16px",marginBottom:"1.25rem",fontSize:"13px",color:"#b91c1c"}}>🚨 A priority alert has been sent.</div>}
+        <div style={{background:"white",borderRadius:"14px",padding:"1.25rem",textAlign:"left",marginBottom:"1.75rem",border:"1px solid #eee"}}>
+          <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"0.75rem"}}><span style={{color:RATING_COLORS[rating],fontSize:"22px"}}>{"★".repeat(rating)}</span><span style={{fontSize:"14px",fontWeight:500,color:RATING_COLORS[rating]}}>{STAR_LABELS[rating]}</span></div>
+          {ISSUE_TAGS.filter(t=>tags.includes(t.id)).length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:"5px",marginBottom:comment?"0.75rem":0}}>{ISSUE_TAGS.filter(t=>tags.includes(t.id)).map(t=><span key={t.id} style={{fontSize:"12px",background:"#f3f3f3",borderRadius:"999px",padding:"3px 10px"}}>{t.icon} {t.label}</span>)}</div>}
+          {comment&&<p style={{fontSize:"13px",color:"#777",margin:0,fontStyle:"italic"}}>"{comment}"</p>}
+        </div>
+        <button onClick={()=>{ window.location.href="https://erikcamenzuli.github.io/cleancheck/"; }} style={{background:"#DA291C",color:"white",border:"none",borderRadius:"999px",padding:"12px 28px",fontSize:"14px",fontWeight:500,cursor:"pointer"}}>← Back to CleanCheck</button>
+      </div>
+    </div>
+  );
+  return (
+    <div style={{minHeight:"100vh",background:"#f5f5f3"}}>
+      <style>{`.tag-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:999px;border:1.5px solid #ddd;background:white;font-size:13px;cursor:pointer;transition:all 0.15s;color:#444;} .tag-btn:hover{border-color:#bbb;} .tag-btn.neg{background:#fff0f0;border-color:#E24B4A;color:#c0392b;} .tag-btn.pos{background:#f0fff4;border-color:#27AE60;color:#1e8449;} .star-b{background:none;border:none;font-size:46px;cursor:pointer;padding:0 3px;transition:transform 0.1s;line-height:1;} .star-b:hover{transform:scale(1.12);} .rv-card{background:white;border-radius:16px;padding:1.4rem;margin-bottom:1rem;box-shadow:0 1px 4px rgba(0,0,0,0.06);} .rv-label{font-size:11px;font-weight:500;color:#999;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.8rem;} textarea{width:100%;border:1.5px solid #e5e5e5;border-radius:10px;padding:11px;font-size:14px;resize:vertical;outline:none;color:#333;} textarea:focus{border-color:#DA291C;}`}</style>
+      <div style={{maxWidth:"440px",margin:"0 auto"}}>
+        <div style={{background:"#DA291C",padding:"1.5rem 1.5rem 2.5rem"}}>
+          <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"1rem"}}><div style={{width:38,height:38,background:"rgba(255,255,255,0.15)",borderRadius:"8px",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:"18px",color:"#FFC72C"}}>M</div><div><div style={{color:"rgba(255,255,255,0.65)",fontSize:"11px",textTransform:"uppercase",letterSpacing:"0.08em"}}>McDonald's</div><div style={{color:"white",fontSize:"14px",fontWeight:500}}>{store.name}, {store.state}</div></div></div>
+          <h1 style={{fontFamily:"'Syne',sans-serif",fontSize:"30px",fontWeight:800,color:"white",lineHeight:1.1}}>How clean was<br/>the bathroom?</h1>
+          <p style={{color:"rgba(255,255,255,0.65)",fontSize:"13px",marginTop:"8px"}}>Your feedback goes directly to this store.</p>
+        </div>
+        <div style={{padding:"1.25rem",marginTop:"-1.25rem"}}>
+          <div className="rv-card" style={{textAlign:"center"}}>
+            <div className="rv-label">Overall rating</div>
+            <div style={{display:"flex",justifyContent:"center",gap:"2px",marginBottom:"8px"}}>{[1,2,3,4,5].map(v=><button key={v} className="star-b" style={{color:v<=active?RATING_COLORS[active]:"#e0e0e0"}} onClick={()=>setRating(v)} onMouseEnter={()=>setHover(v)} onMouseLeave={()=>setHover(0)}>★</button>)}</div>
+            <div style={{fontSize:"14px",fontWeight:500,color:active?RATING_COLORS[active]:"#bbb",minHeight:"20px",transition:"color 0.2s"}}>{active?STAR_LABELS[active]:"Tap to rate"}</div>
+          </div>
+          <div className="rv-card"><div className="rv-label">What did you notice?</div><div style={{display:"flex",flexWrap:"wrap",gap:"8px"}}>{ISSUE_TAGS.map(t=>{ const sel=tags.includes(t.id); return <button key={t.id} className={`tag-btn ${sel?(t.neg?"neg":"pos"):""}`} onClick={()=>toggleTag(t.id)}>{t.icon} {t.label}</button>; })}</div></div>
+          <div className="rv-card"><div className="rv-label">Any other comments?</div><textarea rows={3} placeholder="Optional — tell us more..." value={comment} onChange={e=>setComment(e.target.value)}/></div>
+          <button onClick={handleSubmit} disabled={!rating||submitting} style={{width:"100%",padding:"16px",borderRadius:"12px",border:"none",fontSize:"16px",fontWeight:600,cursor:rating?"pointer":"not-allowed",background:rating?"#DA291C":"#e0e0e0",color:rating?"white":"#aaa",transition:"all 0.2s"}}>
+            {submitting?<span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:"8px"}}><span style={{width:16,height:16,border:"2px solid rgba(255,255,255,0.3)",borderTopColor:"white",borderRadius:"50%",display:"inline-block",animation:"spin 0.7s linear infinite"}}></span>Sending…</span>:"Submit feedback"}
+          </button>
+          <div style={{textAlign:"center",marginTop:"1rem",fontSize:"12px",color:"#bbb"}}>{store.address}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════
+   DASHBOARD
+═══════════════════════════════════════════════ */
+function Dashboard({ onBack }) {
+  const [reviews,setReviews]=useState([]); const [selected,setSelected]=useState("all"); const [sort,setSort]=useState("recent"); const [loading,setLoading]=useState(true);
+  useEffect(()=>{ const load=async()=>{ setLoading(true); const r=await getReviews(); setReviews(r); setLoading(false); }; load(); },[]);
+  const filtered=reviews.filter(r=>selected==="all"||r.storeId===selected);
+  const sorted=[...filtered].sort((a,b)=>sort==="recent"?new Date(b.timestamp)-new Date(a.timestamp):sort==="worst"?a.rating-b.rating:b.rating-a.rating);
+  const storeStats=STORES.map(s=>{ const revs=reviews.filter(r=>r.storeId===s.id); return {...s,average:avg(revs.map(r=>r.rating)),count:revs.length}; }).sort((a,b)=>a.average-b.average);
+  const overallAvg=avg(reviews.map(r=>r.rating)); const alertCount=reviews.filter(r=>r.rating<=2).length; const todayCount=reviews.filter(r=>new Date(r.timestamp).toDateString()===new Date().toDateString()).length;
+  return (
+    <div style={{minHeight:"100vh",background:"#0A0A0A",color:"white"}}>
+      <style>{`.dk-card{background:#141414;border:1px solid rgba(255,255,255,0.08);border-radius:14px;} .srow{display:flex;align-items:center;padding:11px 0;border-bottom:1px solid rgba(255,255,255,0.06);gap:12px;cursor:pointer;transition:opacity 0.15s;} .srow:last-child{border:none;} .srow:hover{opacity:0.75;} .sel{background:transparent;border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:rgba(255,255,255,0.7);padding:8px 14px;font-size:13px;cursor:pointer;outline:none;} .sel option{background:#1a1a1a;} .ghost-btn{background:transparent;border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.6);border-radius:8px;padding:7px 14px;font-size:12px;cursor:pointer;} .ghost-btn:hover{background:rgba(255,255,255,0.07);color:white;}`}</style>
+      <div style={{maxWidth:"1120px",margin:"0 auto",padding:"1.5rem"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"2rem",flexWrap:"wrap",gap:"12px"}}>
+          <div style={{display:"flex",alignItems:"center",gap:"16px"}}><button className="ghost-btn" onClick={onBack}>← Back</button><div><div style={{fontFamily:"'Syne',sans-serif",fontSize:"22px",fontWeight:800}}>cleancheck <span style={{color:"#DA291C"}}>dashboard</span></div><div style={{fontSize:"12px",color:"rgba(255,255,255,0.3)"}}>McDonald's Australia · All locations</div></div></div>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:"12px",marginBottom:"1.5rem"}}>
+          {[{label:"Avg rating",val:overallAvg.toFixed(1),col:ratingColor(overallAvg)},{label:"Total reviews",val:reviews.length,col:"white"},{label:"Today",val:todayCount,col:"white"},{label:"Alerts (≤2★)",val:alertCount,col:alertCount>0?"#E24B4A":"#27AE60"}].map(({label,val,col})=>(
+            <div key={label} className="dk-card" style={{padding:"1.25rem"}}><div style={{fontSize:"11px",color:"rgba(255,255,255,0.3)",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:"0.4rem"}}>{label}</div><div style={{fontFamily:"'Syne',sans-serif",fontSize:"34px",fontWeight:800,color:col,lineHeight:1}}>{val}</div></div>
+          ))}
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:"1rem"}}>
+          <div>
+            <div style={{fontSize:"11px",color:"rgba(255,255,255,0.3)",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:"0.75rem"}}>Store ratings</div>
+            <div className="dk-card" style={{padding:"0.5rem 1.25rem"}}>
+              {storeStats.map(s=>(
+                <div key={s.id} className="srow" onClick={()=>setSelected(s.id===selected?"all":s.id)}>
+                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:"13px",fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",color:s.id===selected?"#DA291C":"white"}}>{s.name}</div><div style={{fontSize:"11px",color:"rgba(255,255,255,0.3)"}}>{s.city} · {s.count} reviews</div></div>
+                  <div style={{display:"flex",alignItems:"center",gap:"8px",minWidth:"110px"}}><div style={{flex:1,background:"rgba(255,255,255,0.08)",borderRadius:"999px",height:4,overflow:"hidden"}}><div style={{height:"100%",width:`${(s.average/5)*100}%`,background:ratingColor(s.average),borderRadius:"999px"}}></div></div><div style={{fontSize:"13px",fontWeight:500,color:ratingColor(s.average),minWidth:"28px"}}>{s.count?s.average.toFixed(1):"—"}</div></div>
+                  {s.average<=2.5&&s.count>0&&<span style={{width:7,height:7,borderRadius:"50%",background:"#E24B4A",display:"inline-block",flexShrink:0}}></span>}
+                </div>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"0.75rem"}}>
+              <div style={{fontSize:"11px",color:"rgba(255,255,255,0.3)",textTransform:"uppercase",letterSpacing:"0.07em"}}>Reviews {selected!=="all"&&`— ${STORES.find(s=>s.id===selected)?.name}`}</div>
+              <div style={{display:"flex",gap:"8px",alignItems:"center"}}>{selected!=="all"&&<button className="ghost-btn" onClick={()=>setSelected("all")}>Clear</button>}<select className="sel" value={sort} onChange={e=>setSort(e.target.value)}><option value="recent">Most recent</option><option value="worst">Worst first</option><option value="best">Best first</option></select></div>
+            </div>
+            <div className="dk-card" style={{maxHeight:"520px",overflowY:"auto"}}>
+              {loading&&<div style={{padding:"3rem",textAlign:"center",color:"rgba(255,255,255,0.25)",fontSize:"14px",display:"flex",alignItems:"center",justifyContent:"center",gap:"8px"}}><span style={{width:16,height:16,border:"2px solid rgba(255,255,255,0.1)",borderTopColor:"rgba(255,255,255,0.4)",borderRadius:"50%",display:"inline-block",animation:"spin 0.7s linear infinite"}}></span>Loading reviews…</div>}
+              {!loading&&sorted.length===0&&<div style={{padding:"3rem",textAlign:"center",color:"rgba(255,255,255,0.25)",fontSize:"14px"}}>No reviews yet</div>}
+              {sorted.map(r=><ReviewRow key={r.id} r={r} showStore={selected==="all"} onResolve={id=>setReviews(prev=>prev.map(x=>x.id===id?{...x,resolved:true}:x))}/>)}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════
+   STORE PICKER
+═══════════════════════════════════════════════ */
+function StorePicker({ onPick, onBack }) {
+  const [search,setSearch]=useState("");
+  const filtered=STORES.filter(s=>s.name.toLowerCase().includes(search.toLowerCase())||s.city.toLowerCase().includes(search.toLowerCase())||s.state.toLowerCase().includes(search.toLowerCase()));
+  return (
+    <div style={{minHeight:"100vh",background:"#0A0A0A",color:"white"}}>
+      <div style={{maxWidth:"520px",margin:"0 auto",padding:"2rem 1.5rem"}}>
+        <button onClick={onBack} style={{background:"transparent",border:"none",color:"rgba(255,255,255,0.4)",fontSize:"13px",cursor:"pointer",marginBottom:"2rem",padding:0}}>← Back</button>
+        <div style={{fontFamily:"'Syne',sans-serif",fontSize:"26px",fontWeight:800,marginBottom:"6px"}}>clean<span style={{color:"#DA291C"}}>check</span></div>
+        <div style={{fontSize:"14px",color:"rgba(255,255,255,0.45)",marginBottom:"2rem"}}>Select a McDonald's location to review</div>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search by name or city…" style={{width:"100%",background:"#141414",border:"1px solid rgba(255,255,255,0.12)",borderRadius:"10px",padding:"12px 16px",color:"white",fontSize:"14px",outline:"none",marginBottom:"1rem"}}/>
+        <div style={{display:"flex",flexDirection:"column",gap:"8px"}}>
+          {filtered.map(s=>(
+            <button key={s.id} onClick={()=>onPick(s.id)} style={{background:"#141414",border:"1px solid rgba(255,255,255,0.08)",borderRadius:"12px",padding:"1rem 1.25rem",textAlign:"left",cursor:"pointer",width:"100%"}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}><div><div style={{fontSize:"14px",fontWeight:500,color:"white",marginBottom:"3px"}}>{s.name}</div><div style={{fontSize:"12px",color:"rgba(255,255,255,0.4)"}}>{s.city}, {s.state}</div><div style={{fontSize:"11px",color:"rgba(255,255,255,0.25)",marginTop:"2px"}}>{s.address}</div></div><div style={{color:"#DA291C",fontSize:"20px"}}>→</div></div>
+            </button>
+          ))}
+          {filtered.length===0&&<div style={{textAlign:"center",color:"rgba(255,255,255,0.3)",fontSize:"14px",padding:"2rem"}}>No stores found</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════
+   LANDING PAGE
+═══════════════════════════════════════════════ */
+function Landing({ onNav }) {
+  const [count,setCount]=useState(0);
+  useEffect(()=>{ const load=async()=>{ const r=await getReviews(); setCount(r.length); }; load(); },[]);
+  return (
+    <div style={{minHeight:"100vh",background:"#0A0A0A",color:"white"}}>
+      <style>{`.hero-btn{display:inline-flex;align-items:center;gap:8px;padding:13px 26px;border-radius:999px;font-size:15px;font-weight:500;cursor:pointer;transition:all 0.2s;border:none;font-family:'DM Sans',sans-serif;} .btn-red{background:#DA291C;color:white;} .btn-red:hover{background:#c02418;transform:translateY(-1px);} .btn-ghost{background:transparent;color:white;border:1px solid rgba(255,255,255,0.2);} .btn-ghost:hover{background:rgba(255,255,255,0.08);} .feat-card{background:#141414;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:1.75rem;} .store-link{display:inline-flex;align-items:center;gap:6px;background:#161616;border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:7px 12px;font-size:13px;color:rgba(255,255,255,0.65);cursor:pointer;transition:all 0.2s;text-decoration:none;} .store-link:hover{background:#1e1e1e;border-color:rgba(255,255,255,0.18);color:white;} .topnav{display:flex;align-items:center;justify-content:space-between;padding:1.25rem 2rem;border-bottom:1px solid rgba(255,255,255,0.06);flex-wrap:wrap;gap:10px;}`}</style>
+      <nav className="topnav">
+        <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:"20px"}}>clean<span style={{color:"#DA291C"}}>check</span></div>
+        <div style={{display:"flex",gap:"10px",alignItems:"center"}}>
+          <button className="btn-ghost" style={{padding:"8px 16px",fontSize:"13px",borderRadius:"8px"}} onClick={()=>onNav("login")}>Staff login</button>
+          <button onClick={()=>onNav("devlogin")} style={{background:"transparent",border:"none",color:"rgba(255,255,255,0.12)",fontSize:"11px",cursor:"pointer",padding:"4px 8px"}} title="Dev access">dev</button>
+        </div>
+      </nav>
+      <div style={{maxWidth:"900px",margin:"0 auto",padding:"5rem 2rem 4rem"}}>
+        <div className="fade-up">
+          <div style={{display:"inline-block",background:"rgba(218,41,28,0.15)",color:"#FF6B5B",border:"1px solid rgba(218,41,28,0.3)",borderRadius:"999px",fontSize:"12px",fontWeight:500,padding:"5px 14px",letterSpacing:"0.05em",textTransform:"uppercase",marginBottom:"1.5rem"}}>Built for Australian McDonald's</div>
+          <h1 style={{fontFamily:"'Syne',sans-serif",fontSize:"clamp(40px,6vw,68px)",fontWeight:800,lineHeight:1.06,marginBottom:"1.25rem"}}>Real-time bathroom<br/><span style={{color:"#DA291C"}}>cleanliness feedback</span></h1>
+          <p style={{fontSize:"17px",color:"rgba(255,255,255,0.5)",lineHeight:1.75,maxWidth:"500px",marginBottom:"2.5rem",fontWeight:300}}>Customers scan a QR code, rate the bathroom, and the store manager is notified by email instantly. Built to scale across every McDonald's in Australia.</p>
+        </div>
+        <div className="fade-up-2" style={{display:"flex",gap:"12px",flexWrap:"wrap",marginBottom:"4rem"}}>
+          <button className="hero-btn btn-red" onClick={()=>onNav("storepicker")}>Review a Store →</button>
+          <button className="hero-btn btn-ghost" onClick={()=>onNav("login")}>Staff login</button>
+        </div>
+        <div className="fade-up-3" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:"12px",marginBottom:"4rem"}}>
+          {[{n:STORES.length,s:"locations",suf:""},{n:count,s:"reviews",suf:"+"},{n:"< 30",s:"secs to review",suf:"s"},{n:"100",s:"auto-routed",suf:"%"}].map(({n,s,suf})=>(
+            <div key={s} className="feat-card"><div style={{fontFamily:"'Syne',sans-serif",fontSize:"40px",fontWeight:800,lineHeight:1}}>{n}<span style={{fontSize:"20px",color:"#DA291C"}}>{suf}</span></div><div style={{fontSize:"12px",color:"rgba(255,255,255,0.35)",marginTop:"6px"}}>{s}</div></div>
+          ))}
+        </div>
+        <div className="fade-up-4">
+          {/* How it works */}
+          <div style={{marginBottom:"3rem"}}>
+            <div style={{fontSize:"11px",color:"rgba(255,255,255,0.3)",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:"1.5rem"}}>How it works</div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:"1px",background:"rgba(255,255,255,0.06)",borderRadius:"14px",overflow:"hidden"}}>
+              {[
+                {n:"1",t:"Customer scans",d:"A QR code is printed inside the bathroom. Customer points their phone camera at it — no app needed."},
+                {n:"2",t:"Leaves a rating",d:"A simple star rating, optional issue tags, and a comment. Takes under 30 seconds."},
+                {n:"3",t:"Manager is notified",d:"An email goes directly to that store's manager instantly. Low ratings are flagged as urgent."},
+              ].map(({n,t,d})=>(
+                <div key={n} style={{background:"#141414",padding:"1.75rem"}}>
+                  <div style={{fontFamily:"'Syne',sans-serif",fontSize:"32px",fontWeight:800,color:"#DA291C",marginBottom:"0.75rem",opacity:0.4}}>{n}</div>
+                  <div style={{fontSize:"15px",fontWeight:500,marginBottom:"0.5rem",color:"white"}}>{t}</div>
+                  <div style={{fontSize:"13px",color:"rgba(255,255,255,0.4)",lineHeight:1.6}}>{d}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Features */}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:"12px"}}>
+            {[{i:"📱",t:"No app needed",d:"Works in any phone browser. Customers scan and review instantly with no downloads."},{i:"⚡",t:"Instant alerts",d:"Store managers get an email the moment a low rating is submitted."},{i:"📊",t:"Live dashboard",d:"Every review is tracked centrally — ratings, trends and alerts all in one place."}].map(({i,t,d})=>(
+              <div key={t} className="feat-card"><div style={{fontSize:"26px",marginBottom:"0.75rem"}}>{i}</div><div style={{fontSize:"14px",fontWeight:500,marginBottom:"0.5rem"}}>{t}</div><div style={{fontSize:"13px",color:"rgba(255,255,255,0.4)",lineHeight:1.6}}>{d}</div></div>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div style={{textAlign:"center",padding:"2rem",borderTop:"1px solid rgba(255,255,255,0.06)",color:"rgba(255,255,255,0.2)",fontSize:"13px"}}>CleanCheck — a concept for McDonald's Australia</div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════
+   APP ROUTER
+═══════════════════════════════════════════════ */
+function App() {
+  const params=new URLSearchParams(window.location.search);
+  const storeId=params.get("store"); const view=params.get("view");
+  const [auth,setAuth]=useState(getAuth());
+  const [page,setPage]=useState(()=>{ if(storeId) return "review"; if(view==="dashboard") return "dashboard"; if(view==="login") return "login"; if(view==="devlogin") return "devlogin"; if(view==="storepicker") return "storepicker"; return "landing"; });
+  const nav=(p)=>{ setPage(p); window.history.pushState({},"",p==="landing"?window.location.pathname:p==="storepicker"?"?view=storepicker":`?view=${p}`); };
+  const handleLogin=(authData)=>{ setAuth(authData); setPage(authData.role==="dev"?"dev":"manager"); };
+  const handleLogout=()=>{ clearAuth(); setAuth(null); setPage("landing"); window.history.pushState({},"",window.location.pathname); };
+  if(page==="review")      return <ReviewPage storeId={storeId}/>;
+  if(page==="storepicker") return <StorePicker onPick={id=>{ window.location.href=window.location.pathname+"?store="+id; }} onBack={()=>nav("landing")}/>;
+  if(page==="dashboard")   return <Dashboard onBack={()=>nav("landing")}/>;
+  if(page==="login")       return <StaffLoginPage onLogin={handleLogin} onBack={()=>nav("landing")}/>;
+  if(page==="devlogin")    return <DevLoginPage onLogin={handleLogin} onBack={()=>nav("landing")}/>;
+  if(page==="dev")         return auth?.role==="dev"?<AdminPortal onLogout={handleLogout}/>:<DevLoginPage onLogin={handleLogin} onBack={()=>nav("landing")}/>;
+  if(page==="manager")     return auth?.role==="manager"?<ManagerPortal storeId={auth.storeId} onLogout={handleLogout}/>:<StaffLoginPage onLogin={handleLogin} onBack={()=>nav("landing")}/>;
+  return <Landing onNav={nav}/>;
+}
+
+class ErrorBoundary extends React.Component {
+  constructor(props){super(props);this.state={error:null};}
+  static getDerivedStateFromError(e){return{error:e};}
+  render(){
+    if(this.state.error) return <div style={{padding:"2rem",fontFamily:"monospace",background:"#1a0000",color:"#ff8585",minHeight:"100vh"}}><div style={{fontSize:"18px",fontWeight:"bold",marginBottom:"1rem"}}>CleanCheck Error</div><div style={{fontSize:"14px",marginBottom:"0.5rem"}}>{this.state.error.message}</div><pre style={{fontSize:"12px",whiteSpace:"pre-wrap",color:"rgba(255,150,150,0.7)"}}>{this.state.error.stack}</pre></div>;
+    return this.props.children;
+  }
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<ErrorBoundary><App/></ErrorBoundary>);
+</script>
+</body>
+</html>
