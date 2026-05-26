@@ -520,9 +520,19 @@ function ManagerPortal({ storeId, onLogout }) {
   const [activeTab,setActiveTab]=useState("overview"); const [loading,setLoading]=useState(true);
 
   useEffect(()=>{
-    const load=async()=>{ try { setLoading(true); const [r,mgr]=await Promise.all([getReviews(storeId),getStoreManager(storeId)]); setReviews(r); setName(mgr.name||""); setEmail(mgr.email||""); setLastCleaned(mgr.last_cleaned_at||null); } catch(e){console.error("Portal load error:",e);} finally{setLoading(false);} };
+    const load = async () => {
+      try {
+        setLoading(true);
+        const [r, mgr] = await Promise.all([getReviews(storeId), getStoreManager(storeId)]);
+        setReviews(r); setName(mgr.name||""); setEmail(mgr.email||""); setLastCleaned(mgr.last_cleaned_at||null);
+      } catch(e) {
+        console.error("Portal load error:", e);
+      } finally {
+        setLoading(false);
+      }
+    };
     load();
-  },[storeId]);
+  }, [storeId]);
 
   const handleLogClean=async()=>{ setLogging(true); const ts=await logCleaned(storeId); if(ts) setLastCleaned(ts); setLogging(false); };
   const formatCleaned=(ts)=>{ if(!ts) return null; const d=new Date(ts),now=new Date(),diffM=Math.floor((now-d)/60000); if(diffM<1) return "just now"; if(diffM<60) return diffM+"m ago"; if(diffM<1440) return Math.floor(diffM/60)+"h ago"; return d.toLocaleDateString("en-AU",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}); };
@@ -618,9 +628,19 @@ function AdminPortal({ onLogout }) {
   const [adminLoading,setAdminLoading]=useState(true); const [chartStore,setChartStore]=useState("");
 
   useEffect(()=>{
-    const load=async()=>{ try { setAdminLoading(true); const [r,m]=await Promise.all([getReviews(),getManagerData()]); setReviews(r); setMgmtData(m); } catch(e){console.error("Admin load error:",e);} finally { setAdminLoading(false); };
+    const load = async () => {
+      try {
+        setAdminLoading(true);
+        const [r, m] = await Promise.all([getReviews(), getManagerData()]);
+        setReviews(r); setMgmtData(m);
+      } catch(e) {
+        console.error("Admin load error:", e);
+      } finally {
+        setAdminLoading(false);
+      }
+    };
     load();
-  },[]);
+  }, []);
 
   const storeStats=STORES.map(s=>{ const revs=reviews.filter(r=>r.storeId===s.id); const mgr=mgmtData[s.id]||{}; return {...s,average:avg(revs.map(r=>r.rating)),count:revs.length,mgr}; });
   const handleSaveManager=async(storeId,data)=>{ await saveStoreManager(storeId,data); const m=await getManagerData(); setMgmtData(m); setSaved(storeId); setTimeout(()=>setSaved(null),2000); };
