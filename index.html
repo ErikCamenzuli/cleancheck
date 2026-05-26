@@ -274,15 +274,17 @@ function QRCard({ store, size=180, showPrint=true }) {
 /* ═══════════════════════════════════════════════
    REVIEW ROW
 ═══════════════════════════════════════════════ */
-function ReviewRow({ r, showStore=false }) {
+function ReviewRow({ r, showStore=false, onResolve }) {
   const store = STORES.find(s=>s.id===r.storeId);
   const rtags = Array.isArray(r.tags)?r.tags:[];
-  const [resolved, setResolved] = useState(r.resolved||false);
+  // Use r.resolved from parent state directly — no local state
+  // so switching tabs won't reset it
+  const resolved = r.resolved || false;
   const [resolving, setResolving] = useState(false);
   const handleResolve = async () => {
     setResolving(true);
     const ok = await resolveReview(r.id);
-    if (ok) setResolved(true);
+    if (ok && onResolve) onResolve(r.id);
     setResolving(false);
   };
   return (
