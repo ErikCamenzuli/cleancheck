@@ -578,7 +578,7 @@ function ManagerPortal({ storeId, onLogout }) {
             <div style={{maxHeight:"520px",overflowY:"auto"}}>
               {loading && <div style={{padding:"2rem",textAlign:"center",color:"rgba(255,255,255,0.3)",fontSize:"14px"}}>Loading…</div>}
               {!loading&&reviews.length===0 && <div style={{padding:"2rem",textAlign:"center",color:"rgba(255,255,255,0.25)",fontSize:"14px"}}>No reviews yet — share your QR code!</div>}
-              {reviews.map(r=><ReviewRow key={r.id} r={r} showStore={false}/>)}
+              {reviews.map(r=><ReviewRow key={r.id} r={r} showStore={false} onResolve={id=>setReviews(prev=>prev.map(x=>x.id===id?{...x,resolved:true}:x))}/>)}
             </div>
           </div>
         )}
@@ -804,7 +804,7 @@ function Dashboard({ onBack }) {
             <div className="dk-card" style={{maxHeight:"520px",overflowY:"auto"}}>
               {loading&&<div style={{padding:"3rem",textAlign:"center",color:"rgba(255,255,255,0.25)",fontSize:"14px",display:"flex",alignItems:"center",justifyContent:"center",gap:"8px"}}><span style={{width:16,height:16,border:"2px solid rgba(255,255,255,0.1)",borderTopColor:"rgba(255,255,255,0.4)",borderRadius:"50%",display:"inline-block",animation:"spin 0.7s linear infinite"}}></span>Loading reviews…</div>}
               {!loading&&sorted.length===0&&<div style={{padding:"3rem",textAlign:"center",color:"rgba(255,255,255,0.25)",fontSize:"14px"}}>No reviews yet</div>}
-              {sorted.map(r=><ReviewRow key={r.id} r={r} showStore={selected==="all"}/>)}
+              {sorted.map(r=><ReviewRow key={r.id} r={r} showStore={selected==="all"} onResolve={id=>setReviews(prev=>prev.map(x=>x.id===id?{...x,resolved:true}:x))}/>)}
             </div>
           </div>
         </div>
