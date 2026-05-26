@@ -574,7 +574,7 @@ function ManagerPortal({ storeId, onLogout }) {
             <div className="dk-card" style={{padding:"1.25rem"}}><div style={{fontSize:"13px",fontWeight:500,marginBottom:"4px"}}>Top issues reported</div><div style={{fontSize:"11px",color:"rgba(255,255,255,0.3)",marginBottom:"1rem"}}>Most common problems flagged</div>{tagCounts.length===0?<div style={{color:"rgba(255,255,255,0.25)",fontSize:"13px",padding:"1rem 0",textAlign:"center"}}>No issues reported yet</div>:tagCounts.map(([tag,count],i)=>{ const pct=Math.round((count/reviews.length)*100); return <div key={i} style={{marginBottom:"12px"}}><div style={{display:"flex",justifyContent:"space-between",fontSize:"13px",marginBottom:"5px"}}><span style={{color:"rgba(255,255,255,0.7)"}}>{tag}</span><span style={{color:"rgba(255,255,255,0.4)"}}>{count} reports ({pct}%)</span></div><div style={{background:"rgba(255,255,255,0.08)",borderRadius:"999px",height:5,overflow:"hidden"}}><div style={{height:"100%",width:pct+"%",background:"#DA291C",borderRadius:"999px",transition:"width 0.5s"}}></div></div></div>; })}</div>
           </div>
         )}
-        {activeTab==="reviews" && (
+        <div style={{display:activeTab==="reviews"?"block":"none"}}>
           <div className="dk-card">
             <div style={{padding:"1rem 1.25rem",borderBottom:"1px solid rgba(255,255,255,0.06)",fontSize:"13px",fontWeight:500}}>All reviews — {store.name}</div>
             <div style={{maxHeight:"520px",overflowY:"auto"}}>
@@ -583,8 +583,8 @@ function ManagerPortal({ storeId, onLogout }) {
               {reviews.map(r=><ReviewRow key={r.id} r={r} showStore={false} onResolve={id=>setReviews(prev=>prev.map(x=>x.id===id?{...x,resolved:true}:x))}/>)}
             </div>
           </div>
-        )}
-        {activeTab==="settings" && (
+        </div>
+        <div style={{display:activeTab==="settings"?"block":"none"}}>
           <div style={{display:"grid",gridTemplateColumns:"1fr 260px",gap:"1rem"}}>
             <div className="dk-card" style={{padding:"1.5rem"}}>
               <div style={{fontSize:"14px",fontWeight:500,marginBottom:"1.25rem",color:"white"}}>Your details</div>
@@ -597,7 +597,7 @@ function ManagerPortal({ storeId, onLogout }) {
               <QRCard store={store} size={150}/>
             </div>
           </div>
-        )}
+        </div>
       </div>
     </div>
   );
