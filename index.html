@@ -386,6 +386,7 @@ function ReviewRow({ r, showStore=false, onResolve }) {
 ═══════════════════════════════════════════════ */
 function RatingsChart({ reviews, storeFilter }) {
   const [dayRange, setDayRange] = useState(30);
+  const [tooltip, setTooltip] = useState(null);
   const filtered = storeFilter ? reviews.filter(r=>r.storeId===storeFilter) : reviews;
 
   if (!filtered.length) return (
@@ -445,8 +446,6 @@ function RatingsChart({ reviews, storeFilter }) {
   const yLabels = [1,2,3,4,5];
   const step = dayRange===7 ? 1 : 5;
   const xLabels = points.filter((_,i)=> i%step===0 || i===points.length-1);
-  const [tooltip, setTooltip] = useState(null);
-
   return (
     <div style={{overflowX:"auto"}}>
       <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{display:"block",fontFamily:"'DM Sans',sans-serif"}}>
