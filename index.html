@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- CleanCheck v3.6 - 2026-05-27 -->
+<!-- CleanCheck v3.7 - 2026-05-27 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
@@ -285,7 +285,7 @@ function QRCard({ store, size=180, showPrint=true }) {
   const handlePrint = () => {
     const w = window.open("","_blank");
     w.document.write(`<!DOCTYPE html>
-<!-- CleanCheck v3.6 - 2026-05-27 --><html><head><title>CleanCheck QR — ${store.name}</title>
+<!-- CleanCheck v3.7 - 2026-05-27 --><html><head><title>CleanCheck QR — ${store.name}</title>
     <link href="https://fonts.googleapis.com/css2?family=Syne:wght@800&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet"/>
     <style>body{margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f5f5f3;font-family:'DM Sans',sans-serif;}
     .c{background:white;border-radius:18px;padding:36px 36px 28px;text-align:center;max-width:320px;box-shadow:0 4px 32px rgba(0,0,0,0.1);}
@@ -685,7 +685,7 @@ function ManagerPortal({ storeId, onLogout }) {
             <div style={{maxHeight:"520px",overflowY:"auto"}}>
               {loading && <SkeletonReviewRows count={5}/>}
               {!loading&&reviews.length===0 && <div style={{padding:"2rem",textAlign:"center",color:"rgba(255,255,255,0.25)",fontSize:"14px"}}>No reviews yet — share your QR code!</div>}
-              {!loading&&reviews.map(r=><ReviewRow key={r.id} r={r} showStore={false} onResolve={async id=>{ setReviews(prev=>prev.map(x=>x.id===id?{...x,resolved:true}:x)); const fresh=await getReviews(storeId); setReviews(fresh); }}/>)}
+              {!loading&&reviews.map(r=><ReviewRow key={r.id} r={r} showStore={false} onResolve={async id=>{ const fresh=await getReviews(storeId); setReviews(fresh.filter(rv=>rv.storeId===storeId)); }}/>)}
             </div>
           </div>
         </div>
