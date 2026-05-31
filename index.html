@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- CleanCheck v3.4 - 2026-05-27 -->
+<!-- CleanCheck v3.5 - 2026-05-27 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
@@ -147,7 +147,7 @@ const getReviews = async (storeId) => {
     if (storeId) q = q.eq("store_id", storeId);
     const { data, error } = await q;
     if (error) throw error;
-    return (data||[]).map(r => ({ id:r.id, storeId:r.store_id, rating:r.rating, tags:r.tags||[], comment:r.comment||"", isAlert:r.is_alert, resolved:r.resolved||false, timestamp:r.timestamp }));
+    return (data||[]).map(r => ({ id:r.id, storeId:r.store_id, rating:r.rating, tags:r.tags||[], comment:r.comment||"", isAlert:r.is_alert, resolved:r.resolved||false, resolvedAt:r.resolved_at||null, timestamp:r.timestamp }));
   } catch(e) { console.error("Supabase fetch error", e); return []; }
 };
 const resolveReview = async (id) => {
@@ -207,6 +207,22 @@ const ISSUE_TAGS = [
 const avg       = arr => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0;
 const timeAgo   = ts => { const s=(Date.now()-new Date(ts))/1000; if(s<60) return "just now"; if(s<3600) return Math.floor(s/60)+"m ago"; if(s<86400) return Math.floor(s/3600)+"h ago"; return Math.floor(s/86400)+"d ago"; };
 const ratingColor = r => RATING_COLORS[Math.round(r)]||"#ccc";
+const avgResponseTime = (reviews) => {
+  const resolved = reviews.filter(r => r.resolved && r.resolvedAt && r.timestamp);
+  if (!resolved.length) return null;
+  const totalMs = resolved.reduce((sum, r) => sum + (new Date(r.resolvedAt) - new Date(r.timestamp)), 0);
+  return totalMs / resolved.length;
+};
+const formatDuration = (ms) => {
+  if (ms == null) return "—";
+  const mins = Math.round(ms / 60000);
+  if (mins < 1) return "< 1 min";
+  if (mins < 60) return mins + " min";
+  const hrs = Math.floor(mins / 60);
+  const remMins = mins % 60;
+  if (hrs < 24) return remMins ? `${hrs}h ${remMins}m` : `${hrs}h`;
+  return Math.floor(hrs / 24) + "d";
+};
 
 /* ═══════════════════════════════════════════════
    PIN LOGIN UI
@@ -269,7 +285,7 @@ function QRCard({ store, size=180, showPrint=true }) {
   const handlePrint = () => {
     const w = window.open("","_blank");
     w.document.write(`<!DOCTYPE html>
-<!-- CleanCheck v3.4 - 2026-05-27 --><html><head><title>CleanCheck QR — ${store.name}</title>
+<!-- CleanCheck v3.5 - 2026-05-27 --><html><head><title>CleanCheck QR — ${store.name}</title>
     <link href="https://fonts.googleapis.com/css2?family=Syne:wght@800&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet"/>
     <style>body{margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f5f5f3;font-family:'DM Sans',sans-serif;}
     .c{background:white;border-radius:18px;padding:36px 36px 28px;text-align:center;max-width:320px;box-shadow:0 4px 32px rgba(0,0,0,0.1);}
@@ -630,7 +646,7 @@ function ManagerPortal({ storeId, onLogout }) {
         </div>
         {loading ? <SkeletonStatCards count={6}/> : (
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:"12px",marginBottom:"1.5rem"}}>
-            {[{label:"Avg rating",val:reviews.length?storeAvg.toFixed(1):"—",col:reviews.length?ratingColor(storeAvg):"white"},{label:"Total reviews",val:reviews.length,col:"white"},{label:"Alerts (≤2★)",val:alertCount,col:alertCount>0?"#E24B4A":"#27AE60"},{label:"This week",val:reviews.filter(r=>(Date.now()-new Date(r.timestamp))<604800000).length,col:"white"},{label:"Last review",val:reviews.length?timeAgo(reviews[0].timestamp):"None yet",col:reviews.length?"white":"rgba(255,255,255,0.3)"}].map(({label,val,col})=>(
+            {[{label:"Avg rating",val:reviews.length?storeAvg.toFixed(1):"—",col:reviews.length?ratingColor(storeAvg):"white"},{label:"Total reviews",val:reviews.length,col:"white"},{label:"Alerts (≤2★)",val:alertCount,col:alertCount>0?"#E24B4A":"#27AE60"},{label:"This week",val:reviews.filter(r=>(Date.now()-new Date(r.timestamp))<604800000).length,col:"white"},{label:"Last review",val:reviews.length?timeAgo(reviews[0].timestamp):"None yet",col:reviews.length?"white":"rgba(255,255,255,0.3)"},{label:"Avg response",val:formatDuration(avgResponseTime(reviews)),col:"#6fcf97"}].map(({label,val,col})=>(
               <div key={label} className="dk-card" style={{padding:"1.25rem"}}><div style={{fontSize:"11px",color:"rgba(255,255,255,0.3)",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:"0.4rem"}}>{label}</div><div style={{fontFamily:"'Syne',sans-serif",fontSize:"32px",fontWeight:800,color:col,lineHeight:1}}>{val}</div></div>
             ))}
             <div className="dk-card" style={{padding:"1.25rem",display:"flex",flexDirection:"column",justifyContent:"space-between",gap:"10px"}}>
@@ -737,7 +753,7 @@ function AdminPortal({ onLogout }) {
         {activeTab==="overview" && (
           <div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:"12px",marginBottom:"1.5rem"}}>
-              {[{label:"Avg rating",val:overallAvg.toFixed(1),col:ratingColor(overallAvg)},{label:"Total reviews",val:reviews.length,col:"white"},{label:"Alerts (≤2★)",val:alertCount,col:alertCount>0?"#E24B4A":"#27AE60"},{label:"Stores configured",val:configured+"/"+STORES.length,col:configured===STORES.length?"#27AE60":"#F0B429"}].map(({label,val,col})=>(
+              {[{label:"Avg rating",val:overallAvg.toFixed(1),col:ratingColor(overallAvg)},{label:"Total reviews",val:reviews.length,col:"white"},{label:"Alerts (≤2★)",val:alertCount,col:alertCount>0?"#E24B4A":"#27AE60"},{label:"Avg response time",val:formatDuration(avgResponseTime(reviews)),col:"#6fcf97"},{label:"Stores configured",val:configured+"/"+STORES.length,col:configured===STORES.length?"#27AE60":"#F0B429"}].map(({label,val,col})=>(
                 <div key={label} className="dk-card" style={{padding:"1.25rem"}}><div style={{fontSize:"11px",color:"rgba(255,255,255,0.3)",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:"0.4rem"}}>{label}</div><div style={{fontFamily:"'Syne',sans-serif",fontSize:"32px",fontWeight:800,color:col,lineHeight:1}}>{val}</div></div>
               ))}
             </div>
