@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- CleanCheck v3.7 - 2026-05-27 -->
+<!-- CleanCheck v3.8 - 2026-05-27 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
@@ -37,6 +37,7 @@
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 2px; }
   @keyframes shimmer { 0%{background-position:-600px 0} 100%{background-position:600px 0} }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
   .sk { background:linear-gradient(90deg,rgba(255,255,255,0.04) 25%,rgba(255,255,255,0.08) 50%,rgba(255,255,255,0.04) 75%); background-size:600px 100%; animation:shimmer 1.4s infinite; border-radius:6px; }
 </style>
 </head>
@@ -285,7 +286,7 @@ function QRCard({ store, size=180, showPrint=true }) {
   const handlePrint = () => {
     const w = window.open("","_blank");
     w.document.write(`<!DOCTYPE html>
-<!-- CleanCheck v3.7 - 2026-05-27 --><html><head><title>CleanCheck QR — ${store.name}</title>
+<!-- CleanCheck v3.8 - 2026-05-27 --><html><head><title>CleanCheck QR — ${store.name}</title>
     <link href="https://fonts.googleapis.com/css2?family=Syne:wght@800&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet"/>
     <style>body{margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f5f5f3;font-family:'DM Sans',sans-serif;}
     .c{background:white;border-radius:18px;padding:36px 36px 28px;text-align:center;max-width:320px;box-shadow:0 4px 32px rgba(0,0,0,0.1);}
@@ -605,20 +606,27 @@ function ManagerPortal({ storeId, onLogout }) {
   const [reviews,setReviews]=useState([]); const [name,setName]=useState(""); const [email,setEmail]=useState("");
   const [saved,setSaved]=useState(false); const [lastCleaned,setLastCleaned]=useState(null); const [logging,setLogging]=useState(false);
   const [activeTab,setActiveTab]=useState("overview"); const [loading,setLoading]=useState(true);
+  const [lastUpdated,setLastUpdated]=useState(Date.now());
 
   useEffect(()=>{
-    const load = async () => {
+    let active = true;
+    const load = async (isInitial) => {
       try {
-        setLoading(true);
+        if (isInitial) setLoading(true);
         const [r, mgr] = await Promise.all([getReviews(storeId), getStoreManager(storeId)]);
+        if (!active) return;
         setReviews(r); setName(mgr.name||""); setEmail(mgr.email||""); setLastCleaned(mgr.last_cleaned_at||null);
+        setLastUpdated(Date.now());
       } catch(e) {
         console.error("Portal load error:", e);
       } finally {
-        setLoading(false);
+        if (isInitial && active) setLoading(false);
       }
     };
-    load();
+    load(true);
+    // Poll every 60 seconds for new reviews — no reload, no re-login
+    const interval = setInterval(()=>load(false), 60000);
+    return ()=>{ active = false; clearInterval(interval); };
   }, [storeId]);
 
   const handleLogClean=async()=>{ setLogging(true); const ts=await logCleaned(storeId); if(ts) setLastCleaned(ts); setLogging(false); };
@@ -642,7 +650,13 @@ function ManagerPortal({ storeId, onLogout }) {
       <div style={{maxWidth:"960px",margin:"0 auto",padding:"1.5rem"}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"1.5rem",flexWrap:"wrap",gap:"12px"}}>
           <div><div style={{fontFamily:"'Syne',sans-serif",fontSize:"22px",fontWeight:800}}>clean<span style={{color:"#DA291C"}}>check</span></div><div style={{fontSize:"13px",color:"rgba(255,255,255,0.4)",marginTop:"2px"}}>McDonald's {store.name}, {store.state}</div></div>
-          <button className="ghost-btn" onClick={onLogout}>Log out</button>
+          <div style={{display:"flex",alignItems:"center",gap:"12px"}}>
+            <div style={{display:"flex",alignItems:"center",gap:"6px",fontSize:"11px",color:"rgba(255,255,255,0.35)"}}>
+              <span style={{width:7,height:7,borderRadius:"50%",background:"#6fcf97",display:"inline-block",animation:"pulse 2s infinite"}}></span>
+              Live · auto-updates
+            </div>
+            <button className="ghost-btn" onClick={onLogout}>Log out</button>
+          </div>
         </div>
         {loading ? <SkeletonStatCards count={6}/> : (
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:"12px",marginBottom:"1.5rem"}}>
@@ -717,18 +731,22 @@ function AdminPortal({ onLogout }) {
   const [adminLoading,setAdminLoading]=useState(true); const [chartStore,setChartStore]=useState("");
 
   useEffect(()=>{
-    const load = async () => {
+    let active = true;
+    const load = async (isInitial) => {
       try {
-        setAdminLoading(true);
+        if (isInitial) setAdminLoading(true);
         const [r, m] = await Promise.all([getReviews(), getManagerData()]);
+        if (!active) return;
         setReviews(r); setMgmtData(m);
       } catch(e) {
         console.error("Admin load error:", e);
       } finally {
-        setAdminLoading(false);
+        if (isInitial && active) setAdminLoading(false);
       }
     };
-    load();
+    load(true);
+    const interval = setInterval(()=>load(false), 60000);
+    return ()=>{ active = false; clearInterval(interval); };
   }, []);
 
   const storeStats=STORES.map(s=>{ const revs=reviews.filter(r=>r.storeId===s.id); const mgr=mgmtData[s.id]||{}; return {...s,average:avg(revs.map(r=>r.rating)),count:revs.length,mgr}; });
