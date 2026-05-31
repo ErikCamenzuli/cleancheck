@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- CleanCheck v3.3 - 2026-05-27 -->
+<!-- CleanCheck v3.4 - 2026-05-27 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
@@ -55,6 +55,28 @@ const DEFAULT_CONFIG = {
 const EJ_KEY = "cleancheck_ej_config";
 const getEJConfig = () => { try { return { ...DEFAULT_CONFIG, ...JSON.parse(localStorage.getItem(EJ_KEY)||"{}") }; } catch { return DEFAULT_CONFIG; } };
 const saveEJConfig = (cfg) => localStorage.setItem(EJ_KEY, JSON.stringify(cfg));
+
+/* ─── REVIEW COOLDOWN ─── */
+const COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes per store
+const COOLDOWN_KEY = "cleancheck_last_review";
+const getLastReviewTime = (storeId) => {
+  try {
+    const data = JSON.parse(localStorage.getItem(COOLDOWN_KEY) || "{}");
+    return data[storeId] || 0;
+  } catch { return 0; }
+};
+const setLastReviewTime = (storeId) => {
+  try {
+    const data = JSON.parse(localStorage.getItem(COOLDOWN_KEY) || "{}");
+    data[storeId] = Date.now();
+    localStorage.setItem(COOLDOWN_KEY, JSON.stringify(data));
+  } catch {}
+};
+const getCooldownRemaining = (storeId) => {
+  const last = getLastReviewTime(storeId);
+  const elapsed = Date.now() - last;
+  return elapsed < COOLDOWN_MS ? COOLDOWN_MS - elapsed : 0;
+};
 
 /* ─── AUTH ─── */
 const ADMIN_PIN = "130197";
@@ -247,7 +269,7 @@ function QRCard({ store, size=180, showPrint=true }) {
   const handlePrint = () => {
     const w = window.open("","_blank");
     w.document.write(`<!DOCTYPE html>
-<!-- CleanCheck v3.3 - 2026-05-27 --><html><head><title>CleanCheck QR — ${store.name}</title>
+<!-- CleanCheck v3.4 - 2026-05-27 --><html><head><title>CleanCheck QR — ${store.name}</title>
     <link href="https://fonts.googleapis.com/css2?family=Syne:wght@800&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet"/>
     <style>body{margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f5f5f3;font-family:'DM Sans',sans-serif;}
     .c{background:white;border-radius:18px;padding:36px 36px 28px;text-align:center;max-width:320px;box-shadow:0 4px 32px rgba(0,0,0,0.1);}
@@ -784,18 +806,39 @@ function ReviewPage({ storeId }) {
   const store=getStore(storeId);
   const [rating,setRating]=useState(0); const [hover,setHover]=useState(0); const [tags,setTags]=useState([]);
   const [comment,setComment]=useState(""); const [submitted,setSubmitted]=useState(false); const [submitting,setSubmitting]=useState(false); const [emailSent,setEmailSent]=useState(null);
+  const [cooldownLeft,setCooldownLeft]=useState(getCooldownRemaining(storeId));
   const toggleTag=id=>setTags(t=>t.includes(id)?t.filter(x=>x!==id):[...t,id]);
   const active=hover||rating;
   const handleSubmit=async()=>{
-    if(!rating) return; setSubmitting(true);
+    if(!rating) return;
+    // Check cooldown — prevent spam from same device for same store
+    const remaining = getCooldownRemaining(storeId);
+    if (remaining > 0) { setCooldownLeft(remaining); return; }
+    setSubmitting(true);
     const tagLabels=ISSUE_TAGS.filter(t=>tags.includes(t.id)).map(t=>`${t.icon} ${t.label}`);
     const isAlert=rating<=2;
     await saveReview({storeId:store.id,rating,tags:tagLabels,comment,isAlert});
+    setLastReviewTime(storeId);
     const mgr=await getStoreManager(storeId);
     const toEmail=(mgr.email&&mgr.email.trim())||getEJConfig().notifyEmail;
     const res=await sendEmail({storeName:`${store.name}, ${store.state}`,storeAddress:store.address,rating,ratingLabel:STAR_LABELS[rating],tags:tagLabels,comment,isAlert,toEmail});
     setEmailSent(res.ok); setSubmitting(false); setSubmitted(true);
   };
+  // Show cooldown screen if this device reviewed this store recently
+  if (cooldownLeft > 0 && !submitted) {
+    const mins = Math.ceil(cooldownLeft / 60000);
+    return (
+      <div style={{minHeight:"100vh",background:"#f5f5f3",display:"flex",alignItems:"center",justifyContent:"center",padding:"2rem"}}>
+        <div style={{textAlign:"center",maxWidth:"360px",animation:"fadeUp 0.5s ease both"}}>
+          <div style={{width:80,height:80,background:"#fff8e8",borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 1.5rem",fontSize:"36px"}}>⏱️</div>
+          <h1 style={{fontFamily:"'Syne',sans-serif",fontSize:"26px",fontWeight:800,color:"#0A0A0A",marginBottom:"0.75rem"}}>Thanks again!</h1>
+          <p style={{color:"#666",fontSize:"15px",lineHeight:1.7,marginBottom:"1.5rem"}}>You've already left a review for {store.name} recently. To keep feedback fair, you can leave another review for this location in about {mins} minute{mins!==1?"s":""}.</p>
+          <button onClick={()=>{ window.location.href="https://erikcamenzuli.github.io/cleancheck/"; }} style={{background:"#DA291C",color:"white",border:"none",borderRadius:"999px",padding:"12px 28px",fontSize:"14px",fontWeight:500,cursor:"pointer"}}>← Back to CleanCheck</button>
+        </div>
+      </div>
+    );
+  }
+
   if (submitted) return (
     <div style={{minHeight:"100vh",background:"#f5f5f3",display:"flex",alignItems:"center",justifyContent:"center",padding:"2rem"}}>
       <div style={{textAlign:"center",maxWidth:"360px",animation:"fadeUp 0.5s ease both"}}>
