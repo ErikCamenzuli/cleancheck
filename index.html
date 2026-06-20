@@ -1,5 +1,6 @@
 <!DOCTYPE html>
-<!-- CleanCheck v3.8 - 2026-05-27 // © 2026 Erik Camenzuli. All rights reserved. -->
+<!-- CleanCheck v4.0 - 2026-06-15 (pinned CDN versions) -->
+<!-- © 2026 Erik Camenzuli. All rights reserved. -->
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
@@ -10,11 +11,11 @@
 <title>CleanCheck — McDonald's Bathroom Feedback</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23DA291C'/><text x='16' y='23' font-size='20' font-family='serif' font-weight='bold' text-anchor='middle' fill='%23FFC72C'>C</text></svg>" />
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Syne:wght@700;800&display=swap" rel="stylesheet" />
-<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4.4.1/dist/email.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { height: 100%; }
@@ -286,7 +287,7 @@ function QRCard({ store, size=180, showPrint=true }) {
   const handlePrint = () => {
     const w = window.open("","_blank");
     w.document.write(`<!DOCTYPE html>
-<!-- CleanCheck v3.8 - 2026-05-27 --><html><head><title>CleanCheck QR — ${store.name}</title>
+<!-- CleanCheck v4.0 - 2026-06-15 (pinned CDN versions) --><html><head><title>CleanCheck QR — ${store.name}</title>
     <link href="https://fonts.googleapis.com/css2?family=Syne:wght@800&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet"/>
     <style>body{margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f5f5f3;font-family:'DM Sans',sans-serif;}
     .c{background:white;border-radius:18px;padding:36px 36px 28px;text-align:center;max-width:320px;box-shadow:0 4px 32px rgba(0,0,0,0.1);}
