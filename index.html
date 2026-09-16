@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- CleanCheck v5.3 - 16/09/2026 -->
+<!-- CleanCheck v5.4 - 16/09/2026 -->
 <!-- © 2026 Erik Camenzuli. All rights reserved. -->
 <html lang="en">
 <head>
@@ -440,6 +440,19 @@ function StoreQRSet({ store, zones=ZONE_ORDER, size=150 }) {
   );
 }
 
+// ZonePickerQR — dropdown to choose a zone, shows/prints just that one code
+function ZonePickerQR({ store, zones=ZONE_ORDER, size=150 }) {
+  const [sel, setSel] = useState(zones[0] || "bathroom");
+  return (
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:"1rem",width:"100%"}}>
+      <select value={sel} onChange={e=>setSel(e.target.value)} style={{background:"#1a1a1a",border:"1px solid rgba(255,255,255,0.15)",borderRadius:"8px",color:"rgba(255,255,255,0.85)",padding:"9px 14px",fontSize:"13px",outline:"none",cursor:"pointer",width:"100%",maxWidth:"260px"}}>
+        {zones.map(z => <option key={z} value={z}>{getZone(z).label}</option>)}
+      </select>
+      <QRCard store={store} zone={sel} size={size} showPrint={true}/>
+    </div>
+  );
+}
+
 /* ═══════════════════════════════════════════════
    SKELETON LOADERS
 ═══════════════════════════════════════════════ */
@@ -803,7 +816,7 @@ function ManagerPortal({ storeId, onLogout }) {
           <div>
             <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr)",gap:"1rem",marginBottom:"1rem"}} className="mgr-grid">
               <div className="dk-card" style={{padding:"1.25rem"}}><div style={{fontSize:"13px",fontWeight:500,marginBottom:"1rem"}}>Rating trend — last 14 days</div>{loading?<div style={{color:"rgba(255,255,255,0.3)",fontSize:"13px"}}>Loading…</div>:reviews.length===0?<div style={{color:"rgba(255,255,255,0.25)",fontSize:"13px",padding:"2rem 0",textAlign:"center"}}>No reviews yet</div>:<TrendChart/>}</div>
-              <div className="dk-card" style={{padding:"1.5rem",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:"1rem"}}><div style={{fontSize:"13px",fontWeight:500,color:"rgba(255,255,255,0.6)"}}>Bathroom QR code</div><QRCard store={store} zone="bathroom" size={150}/><div style={{fontSize:"11px",color:"rgba(255,255,255,0.35)",textAlign:"center"}}>See all zone codes in the Settings tab</div></div>
+              <div className="dk-card" style={{padding:"1.5rem",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:"1rem"}}><div style={{fontSize:"13px",fontWeight:500,color:"rgba(255,255,255,0.6)"}}>QR codes</div><ZonePickerQR store={store} size={150}/></div>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"1rem"}}>
               <div className="dk-card" style={{padding:"1.25rem"}}><div style={{fontSize:"13px",fontWeight:500,marginBottom:"1rem"}}>Busiest complaint times</div>{reviews.length===0?<div style={{color:"rgba(255,255,255,0.25)",fontSize:"13px",padding:"1rem 0",textAlign:"center"}}>No data yet</div>:<><HourChart/><div style={{display:"flex",gap:"16px",marginTop:"8px"}}><div style={{display:"flex",alignItems:"center",gap:"6px",fontSize:"11px",color:"rgba(255,255,255,0.4)"}}><div style={{width:10,height:10,background:"rgba(218,41,28,0.25)",borderRadius:2}}></div>All reviews</div><div style={{display:"flex",alignItems:"center",gap:"6px",fontSize:"11px",color:"rgba(255,255,255,0.4)"}}><div style={{width:10,height:10,background:"#DA291C",borderRadius:2}}></div>Alerts only</div></div></>}</div>
@@ -839,7 +852,7 @@ function ManagerPortal({ storeId, onLogout }) {
             </div>
             <div className="dk-card" style={{padding:"1.5rem"}}>
               <div style={{fontSize:"13px",fontWeight:500,color:"rgba(255,255,255,0.6)",marginBottom:"1rem"}}>Your store's QR codes</div>
-              <StoreQRSet store={store} size={140}/>
+              <ZonePickerQR store={store} size={150}/>
             </div>
           </div>
         </div>
