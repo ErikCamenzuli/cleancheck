@@ -799,7 +799,7 @@ function ManagerPortal({ storeId, onLogout }) {
           <div>
             <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr)",gap:"1rem",marginBottom:"1rem"}} className="mgr-grid">
               <div className="dk-card" style={{padding:"1.25rem"}}><div style={{fontSize:"13px",fontWeight:500,marginBottom:"1rem"}}>Rating trend — last 14 days</div>{loading?<div style={{color:"rgba(255,255,255,0.3)",fontSize:"13px"}}>Loading…</div>:reviews.length===0?<div style={{color:"rgba(255,255,255,0.25)",fontSize:"13px",padding:"2rem 0",textAlign:"center"}}>No reviews yet</div>:<TrendChart/>}</div>
-              <div className="dk-card" style={{padding:"1.5rem",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:"1rem"}}><div style={{fontSize:"13px",fontWeight:500,color:"rgba(255,255,255,0.6)"}}>Your QR code</div><QRCard store={store} size={150}/></div>
+              <div className="dk-card" style={{padding:"1.5rem",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:"1rem"}}><div style={{fontSize:"13px",fontWeight:500,color:"rgba(255,255,255,0.6)"}}>Bathroom QR code</div><QRCard store={store} zone="bathroom" size={150}/><div style={{fontSize:"11px",color:"rgba(255,255,255,0.35)",textAlign:"center"}}>See all zone codes in the Settings tab</div></div>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"1rem"}}>
               <div className="dk-card" style={{padding:"1.25rem"}}><div style={{fontSize:"13px",fontWeight:500,marginBottom:"1rem"}}>Busiest complaint times</div>{reviews.length===0?<div style={{color:"rgba(255,255,255,0.25)",fontSize:"13px",padding:"1rem 0",textAlign:"center"}}>No data yet</div>:<><HourChart/><div style={{display:"flex",gap:"16px",marginTop:"8px"}}><div style={{display:"flex",alignItems:"center",gap:"6px",fontSize:"11px",color:"rgba(255,255,255,0.4)"}}><div style={{width:10,height:10,background:"rgba(218,41,28,0.25)",borderRadius:2}}></div>All reviews</div><div style={{display:"flex",alignItems:"center",gap:"6px",fontSize:"11px",color:"rgba(255,255,255,0.4)"}}><div style={{width:10,height:10,background:"#DA291C",borderRadius:2}}></div>Alerts only</div></div></>}</div>
@@ -833,9 +833,9 @@ function ManagerPortal({ storeId, onLogout }) {
               <div style={{marginBottom:"1.25rem"}}><div style={{fontSize:"12px",color:"rgba(255,255,255,0.4)",marginBottom:"6px"}}>Notification email</div><input className="inp" type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="your@email.com.au"/><div style={{fontSize:"11px",color:"rgba(255,255,255,0.25)",marginTop:"5px"}}>Review alerts for {store.name} will be sent here.</div></div>
               <button onClick={handleSave} style={{background:"#DA291C",color:"white",border:"none",borderRadius:"8px",padding:"10px 20px",fontSize:"14px",fontWeight:500,cursor:"pointer"}}>{saved?"✓ Saved!":"Save details"}</button>
             </div>
-            <div className="dk-card" style={{padding:"1.5rem",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:"1rem"}}>
-              <div style={{fontSize:"13px",fontWeight:500,color:"rgba(255,255,255,0.6)"}}>Your bathroom QR code</div>
-              <QRCard store={store} size={150}/>
+            <div className="dk-card" style={{padding:"1.5rem"}}>
+              <div style={{fontSize:"13px",fontWeight:500,color:"rgba(255,255,255,0.6)",marginBottom:"1rem"}}>Your store's QR codes</div>
+              <StoreQRSet store={store} size={140}/>
             </div>
           </div>
         </div>
