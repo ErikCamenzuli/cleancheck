@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- CleanCheck v5.1 - 2026-06-15 (zoned + staff settings all codes) -->
+<!-- CleanCheck v5.3 - 16/09/2026 -->
 <!-- © 2026 Erik Camenzuli. All rights reserved. -->
 <html lang="en">
 <head>
@@ -179,7 +179,7 @@ async function sendEmail({ storeName, storeAddress, zoneLabel, rating, ratingLab
       tags:tags.length?tags.join(", "):"None selected",
       comment:comment||"No comment left.",
       is_alert:isAlert?"YES — IMMEDIATE ACTION REQUIRED":"No",
-      subject, timestamp:new Date().toLocaleString("en-AU"),
+      subject, timestamp:fmtDateTime(new Date()),
     });
     return { ok:true };
   } catch(e) { return { ok:false, error:e?.text||e?.message||"Unknown error" }; }
@@ -287,7 +287,11 @@ const ALL_TAGS = (() => {
 // Backward-compat alias: some older code references ISSUE_TAGS
 const ISSUE_TAGS = ALL_TAGS;
 const avg       = arr => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0;
-const timeAgo   = ts => { const s=(Date.now()-new Date(ts))/1000; if(s<60) return "just now"; if(s<3600) return Math.floor(s/60)+"m ago"; if(s<86400) return Math.floor(s/3600)+"h ago"; return Math.floor(s/86400)+"d ago"; };
+// Date helpers — Australian DD/MM/YYYY format everywhere
+const pad2 = n => String(n).padStart(2,"0");
+const fmtDate = ts => { const d=new Date(ts); return `${pad2(d.getDate())}/${pad2(d.getMonth()+1)}/${d.getFullYear()}`; };
+const fmtDateTime = ts => { const d=new Date(ts); return `${pad2(d.getDate())}/${pad2(d.getMonth()+1)}/${d.getFullYear()} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`; };
+const fmtDateShort = ts => { const d=new Date(ts); return `${pad2(d.getDate())}/${pad2(d.getMonth()+1)}`; };
 const ratingColor = r => RATING_COLORS[Math.round(r)]||"#ccc";
 const avgResponseTime = (reviews) => {
   const resolved = reviews.filter(r => r.resolved && r.resolvedAt && r.timestamp);
@@ -517,7 +521,7 @@ function ReviewRow({ r, showStore=false, onResolve }) {
           {resolved && <span style={{fontSize:"11px",background:"rgba(39,174,96,0.15)",color:"#6fcf97",borderRadius:"999px",padding:"2px 8px",marginLeft:"8px"}}>✓ Resolved</span>}
         </div>
         <div style={{fontSize:"11px",color:"rgba(255,255,255,0.28)",textAlign:"right"}}>
-          <div>{timeAgo(r.timestamp)}</div>
+          <div>{fmtDateTime(r.timestamp)}</div>
           {showStore && <div style={{color:"rgba(255,255,255,0.45)",marginTop:"2px"}}>{store?.name}, {store?.state}</div>}
         </div>
       </div>
@@ -623,7 +627,7 @@ function RatingsChart({ reviews, storeFilter }) {
               {tooltip.avg.toFixed(1)}★ avg
             </text>
             <text x={Math.min(tooltip.x-50,W-120)+55} y={tooltip.y-18} textAnchor="middle" fill="rgba(255,255,255,0.5)" fontSize="10">
-              {tooltip.count} review{tooltip.count!==1?"s":""} · {tooltip.day.slice(5).replace("-","/")}
+              {tooltip.count} review{tooltip.count!==1?"s":""} · {fmtDateShort(tooltip.day)}
             </text>
           </g>
         )}
@@ -749,13 +753,13 @@ function ManagerPortal({ storeId, onLogout }) {
   }, [storeId]);
 
   const handleLogClean=async()=>{ setLogging(true); const ts=await logCleaned(storeId); if(ts) setLastCleaned(ts); setLogging(false); };
-  const formatCleaned=(ts)=>{ if(!ts) return null; const d=new Date(ts),now=new Date(),diffM=Math.floor((now-d)/60000); if(diffM<1) return "just now"; if(diffM<60) return diffM+"m ago"; if(diffM<1440) return Math.floor(diffM/60)+"h ago"; return d.toLocaleDateString("en-AU",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}); };
+  const formatCleaned=(ts)=>{ if(!ts) return null; return fmtDateTime(ts); };
   const handleSave=async()=>{ const mgr=await getStoreManager(storeId); await saveStoreManager(storeId,{...mgr,name,email}); setSaved(true); setTimeout(()=>setSaved(false),2000); };
 
   const storeAvg=avg(reviews.map(r=>r.rating));
   const alertCount=reviews.filter(r=>r.rating<=2).length;
 
-  const trendData=Array.from({length:14},(_,i)=>{ const d=new Date(Date.now()-(13-i)*86400000); const dayRevs=reviews.filter(r=>new Date(r.timestamp).toDateString()===d.toDateString()); return {label:d.toLocaleDateString("en-AU",{day:"numeric",month:"short"}),avg:dayRevs.length?avg(dayRevs.map(r=>r.rating)):null,count:dayRevs.length}; });
+  const trendData=Array.from({length:14},(_,i)=>{ const d=new Date(Date.now()-(13-i)*86400000); const dayRevs=reviews.filter(r=>new Date(r.timestamp).toDateString()===d.toDateString()); return {label:fmtDateShort(d),avg:dayRevs.length?avg(dayRevs.map(r=>r.rating)):null,count:dayRevs.length}; });
   const hourData=(()=>{ const hours=Array.from({length:24},(_,i)=>({hour:i,count:0,alerts:0})); reviews.forEach(r=>{ const h=new Date(r.timestamp).getHours(); hours[h].count++; if(r.rating<=2) hours[h].alerts++; }); const blocks=[{label:"12am–6am",hours:[0,1,2,3,4,5]},{label:"6am–9am",hours:[6,7,8]},{label:"9am–12pm",hours:[9,10,11]},{label:"12pm–3pm",hours:[12,13,14]},{label:"3pm–6pm",hours:[15,16,17]},{label:"6pm–9pm",hours:[18,19,20]},{label:"9pm–12am",hours:[21,22,23]}]; return blocks.map(b=>({label:b.label,count:b.hours.reduce((s,h)=>s+hours[h].count,0),alerts:b.hours.reduce((s,h)=>s+hours[h].alerts,0)})); })();
   const tagCounts=(()=>{ const counts={}; reviews.forEach(r=>{ (r.tags||[]).forEach(t=>{ const tag=ISSUE_TAGS.find(x=>`${x.icon} ${x.label}`===t||x.id===t); if(tag&&tag.neg) counts[t]=(counts[t]||0)+1; }); }); return Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,5); })();
   // Zone breakdown — average rating + count per zone, so managers see WHERE the problem is
@@ -781,11 +785,11 @@ function ManagerPortal({ storeId, onLogout }) {
         </div>
         {loading ? <SkeletonStatCards count={6}/> : (
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:"12px",marginBottom:"1.5rem"}}>
-            {[{label:"Avg rating",val:reviews.length?storeAvg.toFixed(1):"—",col:reviews.length?ratingColor(storeAvg):"white"},{label:"Total reviews",val:reviews.length,col:"white"},{label:"Alerts (≤2★)",val:alertCount,col:alertCount>0?"#E24B4A":"#27AE60"},{label:"This week",val:reviews.filter(r=>(Date.now()-new Date(r.timestamp))<604800000).length,col:"white"},{label:"Last review",val:reviews.length?timeAgo(reviews[0].timestamp):"None yet",col:reviews.length?"white":"rgba(255,255,255,0.3)"},{label:"Avg response",val:formatDuration(avgResponseTime(reviews)),col:"#6fcf97"}].map(({label,val,col})=>(
-              <div key={label} className="dk-card" style={{padding:"1.25rem"}}><div style={{fontSize:"11px",color:"rgba(255,255,255,0.3)",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:"0.4rem"}}>{label}</div><div style={{fontFamily:"'Syne',sans-serif",fontSize:"32px",fontWeight:800,color:col,lineHeight:1}}>{val}</div></div>
+            {[{label:"Avg rating",val:reviews.length?storeAvg.toFixed(1):"—",col:reviews.length?ratingColor(storeAvg):"white"},{label:"Total reviews",val:reviews.length,col:"white"},{label:"Alerts (≤2★)",val:alertCount,col:alertCount>0?"#E24B4A":"#27AE60"},{label:"This week",val:reviews.filter(r=>(Date.now()-new Date(r.timestamp))<604800000).length,col:"white"},{label:"Last review",val:reviews.length?fmtDateTime(reviews[0].timestamp):"None yet",col:reviews.length?"white":"rgba(255,255,255,0.3)",small:true},{label:"Avg response",val:formatDuration(avgResponseTime(reviews)),col:"#6fcf97"}].map(({label,val,col,small})=>(
+              <div key={label} className="dk-card" style={{padding:"1.25rem"}}><div style={{fontSize:"11px",color:"rgba(255,255,255,0.3)",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:"0.4rem"}}>{label}</div><div style={{fontFamily:"'Syne',sans-serif",fontSize:small?"18px":"32px",fontWeight:800,color:col,lineHeight:1.15}}>{val}</div></div>
             ))}
             <div className="dk-card" style={{padding:"1.25rem",display:"flex",flexDirection:"column",justifyContent:"space-between",gap:"10px"}}>
-              <div><div style={{fontSize:"11px",color:"rgba(255,255,255,0.3)",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:"6px"}}>Last cleaned</div><div style={{fontFamily:"'Syne',sans-serif",fontSize:"20px",fontWeight:800,color:lastCleaned?"#6fcf97":"#F0B429",lineHeight:1}}>{lastCleaned?formatCleaned(lastCleaned):"Not logged"}</div></div>
+              <div><div style={{fontSize:"11px",color:"rgba(255,255,255,0.3)",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:"6px"}}>Last cleaned</div><div style={{fontFamily:"'Syne',sans-serif",fontSize:"16px",fontWeight:800,color:lastCleaned?"#6fcf97":"#F0B429",lineHeight:1.15}}>{lastCleaned?formatCleaned(lastCleaned):"Not logged"}</div></div>
               <button onClick={handleLogClean} disabled={logging} style={{background:"#DA291C",color:"white",border:"none",borderRadius:"7px",padding:"8px 12px",fontSize:"12px",fontWeight:500,cursor:"pointer",opacity:logging?0.6:1,width:"100%"}}>{logging?"Logging…":"✓ Log clean now"}</button>
             </div>
           </div>
