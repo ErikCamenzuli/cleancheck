@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- CleanCheck v5.5 - 16/09/2026 -->
+<!-- CleanCheck v5.6 - 10/10/2026 -->
 <!-- © 2026 Erik Camenzuli. All rights reserved. -->
 <html lang="en">
 <head>
@@ -977,12 +977,15 @@ function AdminPortal({ onLogout }) {
 ═══════════════════════════════════════════════ */
 function ReviewPage({ storeId, zone }) {
   const store=getStore(storeId);
-  const zoneKey=ZONES[zone]?zone:"bathroom";
+  // If the URL carried a valid zone, use it. Otherwise the customer picks one first.
+  const urlZoneValid = !!ZONES[zone];
+  const [pickedZone,setPickedZone]=useState(urlZoneValid ? zone : null);
+  const zoneKey = pickedZone || "bathroom";
   const zoneDef=getZone(zoneKey);
   const TAGS_FOR_ZONE=zoneTags(zoneKey);
   const [rating,setRating]=useState(0); const [hover,setHover]=useState(0); const [tags,setTags]=useState([]);
   const [comment,setComment]=useState(""); const [submitted,setSubmitted]=useState(false); const [submitting,setSubmitting]=useState(false); const [emailSent,setEmailSent]=useState(null);
-  const [cooldownLeft,setCooldownLeft]=useState(getCooldownRemaining(storeId,zoneKey));
+  const [cooldownLeft,setCooldownLeft]=useState(0);
   const toggleTag=id=>setTags(t=>t.includes(id)?t.filter(x=>x!==id):[...t,id]);
   const active=hover||rating;
   const handleSubmit=async()=>{
@@ -1000,6 +1003,35 @@ function ReviewPage({ storeId, zone }) {
     const res=await sendEmail({storeName:`${store.name}, ${store.state}`,storeAddress:store.address,zoneLabel:zoneDef.label,rating,ratingLabel:STAR_LABELS[rating],tags:tagLabels,comment,isAlert,toEmail});
     setEmailSent(res.ok); setSubmitting(false); setSubmitted(true);
   };
+  // Once a zone is known (from URL or picked), check this device's cooldown for it
+  useEffect(()=>{ if(pickedZone){ setCooldownLeft(getCooldownRemaining(storeId,pickedZone)); } },[pickedZone,storeId]);
+  // Zone picker — shown when the customer arrived without a zone in the URL
+  if (!pickedZone && !submitted) {
+    return (
+      <div style={{minHeight:"100vh",background:"#f5f5f3"}}>
+        <div style={{maxWidth:"440px",margin:"0 auto"}}>
+          <div style={{background:"#DA291C",padding:"1.5rem 1.5rem 2.5rem"}}>
+            <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"1rem"}}><div style={{width:38,height:38,background:"rgba(255,255,255,0.15)",borderRadius:"8px",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:"18px",color:"#FFC72C"}}>M</div><div><div style={{color:"rgba(255,255,255,0.65)",fontSize:"11px",textTransform:"uppercase",letterSpacing:"0.08em"}}>McDonald's</div><div style={{color:"white",fontSize:"14px",fontWeight:500}}>{store.name}, {store.state}</div></div></div>
+            <h1 style={{fontFamily:"'Syne',sans-serif",fontSize:"30px",fontWeight:800,color:"white",lineHeight:1.1}}>Which area are<br/>you reviewing?</h1>
+          </div>
+          <div style={{padding:"1.5rem",marginTop:"-1.25rem"}}>
+            <div style={{background:"white",borderRadius:"16px",padding:"1.4rem",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+              <div style={{fontSize:"11px",fontWeight:500,color:"#999",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:"0.9rem"}}>Choose an area</div>
+              <div style={{display:"flex",flexDirection:"column",gap:"10px"}}>
+                {ZONE_ORDER.map(z=>(
+                  <button key={z} onClick={()=>setPickedZone(z)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",width:"100%",padding:"15px 18px",borderRadius:"12px",border:"1.5px solid #e5e5e5",background:"white",fontSize:"16px",fontWeight:500,color:"#333",cursor:"pointer",transition:"all 0.15s"}} onMouseEnter={e=>{e.currentTarget.style.borderColor="#DA291C";e.currentTarget.style.background="#fff6f5";}} onMouseLeave={e=>{e.currentTarget.style.borderColor="#e5e5e5";e.currentTarget.style.background="white";}}>
+                    <span>{getZone(z).label}</span>
+                    <span style={{color:"#DA291C",fontSize:"18px"}}>→</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <p style={{textAlign:"center",fontSize:"12px",color:"#aaa",marginTop:"1rem"}}>Tip: scanning the QR code in an area takes you straight there.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
   // Show cooldown screen if this device reviewed this store recently
   if (cooldownLeft > 0 && !submitted) {
     const mins = Math.ceil(cooldownLeft / 60000);
