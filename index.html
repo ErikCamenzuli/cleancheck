@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- CleanCheck v5.7 - 27/10/2026 -->
+<!-- CleanCheck v5.8 - 27/10/2026 -->
 <!-- © 2026 Erik Camenzuli. All rights reserved. -->
 <html lang="en">
 <head>
@@ -1105,7 +1105,7 @@ function Dashboard({ onBack }) {
       <style>{`.dk-card{background:#141414;border:1px solid rgba(255,255,255,0.08);border-radius:14px;} .srow{display:flex;align-items:center;padding:11px 0;border-bottom:1px solid rgba(255,255,255,0.06);gap:12px;cursor:pointer;transition:opacity 0.15s;} .srow:last-child{border:none;} .srow:hover{opacity:0.75;} .sel{background:transparent;border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:rgba(255,255,255,0.7);padding:8px 14px;font-size:13px;cursor:pointer;outline:none;} .sel option{background:#1a1a1a;} .ghost-btn{background:transparent;border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.6);border-radius:8px;padding:7px 14px;font-size:12px;cursor:pointer;} .ghost-btn:hover{background:rgba(255,255,255,0.07);color:white;}`}</style>
       <div style={{maxWidth:"1120px",margin:"0 auto",padding:"1.5rem"}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"2rem",flexWrap:"wrap",gap:"12px"}}>
-          <div style={{display:"flex",alignItems:"center",gap:"16px"}}><button className="ghost-btn" onClick={onBack}>← Back</button><div><div style={{fontFamily:"'Syne',sans-serif",fontSize:"22px",fontWeight:800}}>cleancheck <span style={{color:"#0E9B8E"}}>dashboard</span></div><div style={{fontSize:"12px",color:"rgba(255,255,255,0.3)"}}>McDonald's Australia · All locations</div></div></div>
+          <div style={{display:"flex",alignItems:"center",gap:"16px"}}><button className="ghost-btn" onClick={onBack}>← Back</button><div><div style={{fontFamily:"'Syne',sans-serif",fontSize:"22px",fontWeight:800}}>cleancheck <span style={{color:"#0E9B8E"}}>dashboard</span></div><div style={{fontSize:"12px",color:"rgba(255,255,255,0.3)"}}>All locations</div></div></div>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:"12px",marginBottom:"1.5rem"}}>
           {[{label:"Avg rating",val:overallAvg.toFixed(1),col:ratingColor(overallAvg)},{label:"Total reviews",val:reviews.length,col:"white"},{label:"Today",val:todayCount,col:"white"},{label:"Alerts (≤2★)",val:alertCount,col:alertCount>0?"#E24B4A":"#27AE60"}].map(({label,val,col})=>(
@@ -1153,7 +1153,7 @@ function StorePicker({ onPick, onBack }) {
       <div style={{maxWidth:"520px",margin:"0 auto",padding:"2rem 1.5rem"}}>
         <button onClick={onBack} style={{background:"transparent",border:"none",color:"rgba(255,255,255,0.4)",fontSize:"13px",cursor:"pointer",marginBottom:"2rem",padding:0}}>← Back</button>
         <div style={{fontFamily:"'Syne',sans-serif",fontSize:"26px",fontWeight:800,marginBottom:"6px"}}>clean<span style={{color:"#0E9B8E"}}>check</span></div>
-        <div style={{fontSize:"14px",color:"rgba(255,255,255,0.45)",marginBottom:"2rem"}}>Select a McDonald's location to review</div>
+        <div style={{fontSize:"14px",color:"rgba(255,255,255,0.45)",marginBottom:"2rem"}}>Select a location to review</div>
         <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search by name or city…" style={{width:"100%",background:"#141414",border:"1px solid rgba(255,255,255,0.12)",borderRadius:"10px",padding:"12px 16px",color:"white",fontSize:"14px",outline:"none",marginBottom:"1rem"}}/>
         <div style={{display:"flex",flexDirection:"column",gap:"8px"}}>
           {filtered.map(s=>(
@@ -1188,7 +1188,7 @@ function Landing({ onNav }) {
         <div className="fade-up">
           <div style={{display:"inline-block",background:"rgba(14,155,142,0.15)",color:"#FF6B5B",border:"1px solid rgba(14,155,142,0.3)",borderRadius:"999px",fontSize:"12px",fontWeight:500,padding:"5px 14px",letterSpacing:"0.05em",textTransform:"uppercase",marginBottom:"1.5rem"}}>Built for cleaner stores</div>
           <h1 style={{fontFamily:"'Syne',sans-serif",fontSize:"clamp(40px,6vw,68px)",fontWeight:800,lineHeight:1.06,marginBottom:"1.25rem"}}>Real-time store<br/><span style={{color:"#0E9B8E"}}>cleanliness feedback</span></h1>
-          <p style={{fontSize:"17px",color:"rgba(255,255,255,0.5)",lineHeight:1.75,maxWidth:"500px",marginBottom:"2.5rem",fontWeight:300}}>Customers scan a QR code in any area — bathroom, dining, entrance and more — rate the cleanliness, and the store manager is notified by email instantly. Built to scale across every McDonald's in Australia.</p>
+          <p style={{fontSize:"17px",color:"rgba(255,255,255,0.5)",lineHeight:1.75,maxWidth:"500px",marginBottom:"2.5rem",fontWeight:300}}>Customers scan a QR code in any area — bathroom, dining, entrance and more — rate the cleanliness, and the store manager is notified by email instantly. Built to scale across every location in a business.</p>
         </div>
         <div className="fade-up-2" style={{display:"flex",gap:"12px",flexWrap:"wrap",marginBottom:"4rem"}}>
           <button className="hero-btn btn-red" onClick={()=>onNav("storepicker")}>Review a Store →</button>
@@ -1226,7 +1226,7 @@ function Landing({ onNav }) {
           </div>
         </div>
       </div>
-      <div style={{textAlign:"center",padding:"2rem",borderTop:"1px solid rgba(255,255,255,0.06)",color:"rgba(255,255,255,0.2)",fontSize:"13px"}}>CleanCheck — a concept for McDonald's Australia</div>
+      <div style={{textAlign:"center",padding:"2rem",borderTop:"1px solid rgba(255,255,255,0.06)",color:"rgba(255,255,255,0.2)",fontSize:"13px"}}>CleanCheck — real-time cleanliness feedback for multi-location businesses</div>
     </div>
   );
 }
